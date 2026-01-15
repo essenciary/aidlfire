@@ -28,10 +28,9 @@
 3. [Model Development](#3-model-development)
    - 3.1 [Architecture Selection](#31-architecture-selection)
    - 3.2 [Training Configuration](#32-training-configuration)
-   - 3.3 [Baseline Models](#33-baseline-models)
-   - 3.4 [Model Optimization](#34-model-optimization)
-   - 3.5 [Experiment Tracking & MLOps](#35-experiment-tracking--mlops)
-   - 3.6 [Evaluation Metrics](#36-evaluation-metrics)
+   - 3.3 [Model Optimization](#33-model-optimization)
+   - 3.4 [Experiment Tracking & MLOps](#34-experiment-tracking--mlops)
+   - 3.5 [Evaluation Metrics](#35-evaluation-metrics)
 4. [Application Features](#4-application-features)
    - 4.1 [Core Features](#41-core-features)
    - 4.2 [Advanced Features](#42-advanced-features)
@@ -1499,206 +1498,9 @@ Save model weights and training state to allow recovery, model selection, and an
 - [ ] Document checkpoint loading procedure
 - [ ] Link checkpoints to experiment tracking (W&B run ID)
 
-### 3.3 Baseline Models
+### 3.3 Model Optimization
 
-Baseline models are **simple, non-deep-learning approaches** that provide a performance benchmark. They help answer the critical question: "Does deep learning actually add value, or could we solve this problem with simpler methods?"
-
-**Why Implement Baselines?**
-
-1. **Demonstrate value:** Show that deep learning outperforms traditional methods (or identify when it doesn't)
-2. **Set expectations:** Understand what performance is achievable with simple methods
-3. **Academic rigor:** Standard practice in research to compare against baselines
-4. **Debugging:** If deep learning performs worse than baselines, indicates a problem (bug, wrong data, etc.)
-5. **Capstone requirement:** Demonstrates understanding of the problem domain and appropriate method selection
-
-**Baseline Selection Rationale:**
-
-For wildfire detection, we need baselines that:
-- Are **simple to implement** (don't require weeks of work)
-- Are **standard in remote sensing** (well-established methods)
-- Use **similar inputs** (same satellite imagery, same bands)
-- Provide **meaningful comparison** (not trivial to beat)
-
----
-
-#### 3.3.1 Simple Baseline Models
-
-##### Baseline 1: Threshold-Based Method
-
-**What it is:**
-- Simple rule-based approach using spectral thresholds
-- Based on physical properties: fires emit strongly in SWIR (Short-Wave Infrared) bands
-- Standard approach in remote sensing for fire detection
-
-**How it works:**
-- Apply threshold to SWIR bands (B11, B12) - fires have high SWIR values
-- Optionally combine with NBR (Normalized Burn Ratio) for burned area detection
-- Binary classification: pixel above threshold = fire, below = no fire
-
-**Why This Baseline?**
-
-**Advantages:**
-- ✅ **Simple and fast:** No training required, instant predictions
-- ✅ **Interpretable:** Clear physical rationale (fires emit in SWIR)
-- ✅ **Standard method:** Widely used in remote sensing literature
-- ✅ **Baseline for comparison:** If deep learning can't beat this, something is wrong
-- ✅ **Quick to implement:** Can be done in hours, not days
-
-**Limitations (Why Deep Learning Should Beat It):**
-- ⚠️ **Fixed thresholds:** Cannot adapt to different conditions (atmosphere, sensor calibration, time of day)
-- ⚠️ **No spatial context:** Each pixel classified independently (ignores neighboring pixels)
-- ⚠️ **False positives:** Many non-fire objects have high SWIR (hot surfaces, urban areas, clouds)
-- ⚠️ **No learning:** Cannot learn complex patterns or adapt to data distribution
-- ⚠️ **Single-band focus:** Only uses SWIR bands, ignores other spectral information
-
-**Expected Performance:**
-- **Precision:** Moderate (50-70%) - many false positives from hot surfaces
-- **Recall:** Moderate (60-75%) - misses small fires and fires with low intensity
-- **IoU:** Low (0.40-0.55) - poor boundary accuracy
-- **Why lower than deep learning:** Cannot learn complex patterns, no spatial context, fixed thresholds
-
-**When Threshold-Based Might Be Sufficient:**
-- Very large, intense fires (clear SWIR signal)
-- Simple use cases where false positives are acceptable
-- Real-time systems with extreme computational constraints
-- When training data is unavailable
-
-**Implementation Approach:**
-1. Calculate SWIR band values (B11, B12) for all pixels
-2. Apply threshold (e.g., B11 > 0.3 or B12 > 0.25) - values depend on normalization
-3. Optionally combine with NBR threshold for burned areas
-4. Generate binary mask
-5. Evaluate on same test set as deep learning model
-
-**What to Report:**
-- Threshold values used (and how they were chosen)
-- Performance metrics (IoU, Dice, Precision, Recall)
-- Comparison with deep learning model
-- Analysis of when threshold-based fails (false positives, missed fires)
-- Visual examples showing threshold-based vs. deep learning predictions
-
-##### Baseline 2: Random Forest
-
-**What it is:**
-- Traditional machine learning classifier (ensemble of decision trees)
-- Trained on hand-crafted features (spectral indices, band values)
-- Non-deep-learning approach that can learn from data
-
-**How it works:**
-- Extract features for each pixel: raw band values (B2, B3, B4, B8, B11, B12), spectral indices (NBR, NDVI, BAI)
-- Train Random Forest classifier to predict fire vs. non-fire
-- Make pixel-wise predictions (similar to deep learning output)
-
-**Why This Baseline?**
-
-**Advantages:**
-- ✅ **Learns from data:** Unlike threshold-based, can adapt to training data
-- ✅ **Handles features well:** Good at learning relationships between spectral indices and fire
-- ✅ **Interpretable:** Can analyze feature importance (which bands/indices matter most)
-- ✅ **Standard ML method:** Well-established, widely used in remote sensing
-- ✅ **Good baseline:** Represents "traditional ML" approach (pre-deep-learning era)
-- ✅ **Reasonable performance:** Should achieve better results than threshold-based
-
-**Limitations (Why Deep Learning Should Beat It):**
-- ⚠️ **No spatial context:** Each pixel classified independently (no understanding of fire regions)
-- ⚠️ **Hand-crafted features:** Relies on human-designed features (spectral indices) rather than learned features
-- ⚠️ **Limited complexity:** Cannot learn complex, non-linear patterns that deep learning can
-- ⚠️ **Pixel-wise only:** Cannot understand that fires form connected regions
-- ⚠️ **Feature engineering required:** Need to design good features (spectral indices)
-
-**Expected Performance:**
-- **Precision:** Good (70-80%) - better than threshold-based, learns from data
-- **Recall:** Good (70-80%) - can learn fire patterns from training data
-- **IoU:** Moderate (0.55-0.65) - better than threshold-based, but worse than deep learning
-- **Why lower than deep learning:** No spatial context, limited to hand-crafted features, pixel-wise only
-
-**When Random Forest Might Be Sufficient:**
-- Limited training data (Random Forest works with less data than deep learning)
-- Need for interpretability (feature importance analysis)
-- Computational constraints (faster inference than deep learning)
-- Simple use cases where pixel-wise classification is sufficient
-
-**Feature Engineering for Random Forest:**
-
-**Raw Band Values:**
-- B2 (Blue), B3 (Green), B4 (Red), B8 (NIR), B11 (SWIR-1), B12 (SWIR-2)
-- Direct pixel values from satellite imagery
-
-**Spectral Indices (Hand-Crafted Features):**
-- **NBR (Normalized Burn Ratio):** `(B8 - B12) / (B8 + B12)` - detects burned areas
-- **NDVI (Normalized Difference Vegetation Index):** `(B8 - B4) / (B8 + B4)` - vegetation health
-- **BAI (Burned Area Index):** `1 / ((0.1 - B4)² + (0.06 - B8)²)` - fire detection
-- **NDWI (Normalized Difference Water Index):** `(B3 - B8) / (B3 + B8)` - water detection (helps exclude water)
-- **EVI (Enhanced Vegetation Index):** More advanced vegetation index
-
-**Why These Features?**
-- **Spectral indices:** Capture relationships between bands that are meaningful for fire detection
-- **Domain knowledge:** Based on remote sensing research and physical properties
-- **Complementary:** Different indices capture different aspects (vegetation, burn, water)
-
-**Random Forest Configuration:**
-- **Number of trees:** 100-500 (more trees = better performance, but slower)
-- **Max depth:** 10-20 (deeper trees = more complex patterns, but risk overfitting)
-- **Min samples per leaf:** 5-10 (prevents overfitting)
-- **Feature sampling:** Use all features (or sample subset for each tree)
-
-**What to Report:**
-- Features used (raw bands + spectral indices)
-- Random Forest hyperparameters (number of trees, max depth, etc.)
-- Feature importance analysis (which features matter most for fire detection)
-- Performance metrics (IoU, Dice, Precision, Recall)
-- Comparison with deep learning model
-- Analysis of when Random Forest fails (spatial context, complex patterns)
-- Visual examples showing Random Forest vs. deep learning predictions
-
-**Baseline Comparison Strategy:**
-
-**Evaluation Protocol:**
-1. **Same test set:** Evaluate all baselines and deep learning model on identical test set
-2. **Same metrics:** Use same evaluation metrics (IoU, Dice, Precision, Recall) for fair comparison
-3. **Same preprocessing:** Apply same data preprocessing to all methods
-4. **Multiple runs:** Run each baseline multiple times (if stochastic) and report average
-
-**Expected Results:**
-- **Threshold-based:** Lowest performance (IoU: 0.40-0.55)
-- **Random Forest:** Moderate performance (IoU: 0.55-0.65)
-- **Deep Learning (U-Net):** Highest performance (IoU: 0.70-0.75) - target from Section 1.4
-
-**Why Deep Learning Should Outperform:**
-1. **Spatial context:** U-Net understands that fires form connected regions (not just individual pixels)
-2. **Learned features:** Deep learning learns optimal features automatically (better than hand-crafted)
-3. **Complex patterns:** Can learn non-linear, complex relationships between bands
-4. **End-to-end learning:** Optimizes entire pipeline for the task (not just classification step)
-5. **Transfer learning:** Benefits from pretrained features (ImageNet → satellite imagery)
-
-**When to Investigate (If Deep Learning Doesn't Outperform):**
-- **Bug in implementation:** Check data loading, model architecture, training loop
-- **Insufficient training:** Model may need more epochs or better hyperparameters
-- **Data issues:** Check if training data is correct, sufficient, or properly preprocessed
-- **Overfitting:** Deep learning may be overfitting to training set (check train/val gap)
-- **Baseline too strong:** If Random Forest achieves IoU > 0.70, problem may be too simple for deep learning
-
-**Baseline Implementation Requirements:**
-
-**For Capstone Project:**
-- [ ] Implement threshold-based baseline (SWIR thresholds)
-- [ ] Implement Random Forest baseline (with spectral indices)
-- [ ] Evaluate both baselines on test set
-- [ ] Compare baselines with deep learning model
-- [ ] Document baseline performance in final report
-- [ ] Explain why deep learning outperforms (or investigate if it doesn't)
-- [ ] Include baseline results in evaluation section
-- [ ] Visual comparison: show example predictions from all three methods
-
-**Baseline Documentation:**
-- **Method description:** How each baseline works
-- **Hyperparameters:** Threshold values, Random Forest parameters
-- **Performance metrics:** IoU, Dice, Precision, Recall for each baseline
-- **Comparison table:** Side-by-side comparison of all methods
-- **Failure analysis:** When and why baselines fail
-- **Conclusion:** Why deep learning is the right choice for this problem
-
-### 3.4 Model Optimization
+**Note:** Baseline model implementations (threshold-based and Random Forest) are available in `optional-basline-models-comparison.md` for optional comparison with the deep learning approach. Baselines are not required for the capstone project but can provide valuable context if time permits.
 
 Model optimization is the process of **finding the best hyperparameters** (settings that control training but aren't learned) to maximize model performance. This includes tuning learning rates, architecture choices, loss function weights, and other training configurations.
 
@@ -1719,7 +1521,7 @@ For a capstone project, we need a **practical approach** that:
 
 ---
 
-#### 3.4.1 Hyperparameter Search Space
+#### 3.3.1 Hyperparameter Search Space
 
 The search space defines **which hyperparameters to tune** and **what values to try**. A good search space balances:
 - **Coverage:** Explores enough options to find good hyperparameters
@@ -1930,7 +1732,7 @@ Dropout is a regularization technique that randomly sets some neurons to zero du
 
 ---
 
-#### 3.4.2 Model Export Formats
+#### 3.3.2 Model Export Formats
 
 Model export converts the trained PyTorch model into a format suitable for deployment. The exported model can be loaded and used for inference without the full training code.
 
@@ -2076,7 +1878,7 @@ For a capstone project, we need a format that is:
 5. **Testing:** Thoroughly test exported model before deployment
 6. **Backup:** Keep backup of exported model (don't rely on single copy)
 
-### 3.5 Experiment Tracking & MLOps
+### 3.4 Experiment Tracking & MLOps
 
 Experiment tracking systematically records all training runs, hyperparameters, metrics, and configurations. This enables reproducibility, comparison of experiments, and debugging of training issues.
 
@@ -2090,7 +1892,7 @@ Experiment tracking systematically records all training runs, hyperparameters, m
 
 ---
 
-#### 3.5.1 Weights & Biases (W&B) Setup
+#### 3.4.1 Weights & Biases (W&B) Setup
 
 **Why Weights & Biases?**
 
@@ -2178,7 +1980,7 @@ Experiment tracking systematically records all training runs, hyperparameters, m
 
 ---
 
-#### 3.5.2 Model Versioning
+#### 3.4.2 Model Versioning
 
 Model versioning assigns unique identifiers to trained models and stores metadata about each version. This enables tracking which model was used when, comparing model performance, and rolling back to previous versions if needed.
 
@@ -2239,7 +2041,7 @@ For each model version, create a model card documenting:
 - [ ] Document version history in repository README
 - [ ] Tag model versions in Git (if storing model metadata in Git)
 
-### 3.6 Evaluation Metrics
+### 3.5 Evaluation Metrics
 
 Model evaluation measures how well the trained model performs on unseen data. For segmentation tasks, this requires multiple metrics to capture different aspects of performance (overlap, accuracy, false alarms, missed detections).
 
@@ -2252,7 +2054,7 @@ Model evaluation measures how well the trained model performs on unseen data. Fo
 
 ---
 
-#### 3.6.1 Primary Metrics
+#### 3.5.1 Primary Metrics
 
 **Why These Four Metrics?**
 
@@ -2338,7 +2140,7 @@ These metrics capture the essential aspects of segmentation performance: overlap
 
 ---
 
-#### 3.6.2 Secondary Metrics
+#### 3.5.2 Secondary Metrics
 
 **Why Secondary Metrics?**
 
@@ -2381,7 +2183,7 @@ Primary metrics focus on segmentation quality, but secondary metrics provide add
 
 ---
 
-#### 3.6.3 Evaluation Protocol
+#### 3.5.3 Evaluation Protocol
 
 **Why a Structured Protocol?**
 
@@ -2447,7 +2249,7 @@ A systematic evaluation protocol ensures fair, comprehensive, and reproducible a
 
 ---
 
-#### 3.6.4 Comprehensive Evaluation Requirements
+#### 3.5.4 Comprehensive Evaluation Requirements
 
 **Why Comprehensive Evaluation?**
 
@@ -2544,7 +2346,7 @@ A single metric doesn't tell the full story. Comprehensive evaluation provides c
 - [ ] Perform threshold optimization (ROC and PR curves)
 - [ ] Evaluate on Catalonia validation set separately
 - [ ] Document error analysis (common failure modes, visual examples)
-- [ ] Compare with baseline models (threshold-based, Random Forest)
+- [ ] (Optional) Compare with baseline models if implemented (see `optional-basline-models-comparison.md`)
 - [ ] Include all results in evaluation report
 
 ---
@@ -3955,23 +3757,15 @@ User acceptance testing (UAT) verifies that the system is usable and meets user 
 
 #### Phase 2: Model Development & Optimization (Weeks 4-7)
 
-**Week 4: Baseline Models & Initial Architecture**
+**Week 4: Initial Architecture & Training Setup**
 
-**4.1 Baseline Model Implementation**
-- [ ] **Threshold-based baseline:**
-  - [ ] Implement SWIR-based threshold detection (B11, B12)
-  - [ ] Implement NBR (Normalized Burn Ratio) threshold
-  - [ ] Tune threshold values on validation set
-  - [ ] Evaluate on test set (IoU, Dice, Precision, Recall)
-  - [ ] Document threshold values and performance
-- [ ] **Random Forest baseline:**
-  - [ ] Implement feature extraction (spectral bands, indices: NBR, NDVI, BAI)
-  - [ ] Train Random Forest classifier
-  - [ ] Tune hyperparameters (n_estimators, max_depth, min_samples_split)
-  - [ ] Evaluate on test set (comprehensive metrics)
-  - [ ] Document feature importance and performance
-- [ ] Create baseline comparison report
-- [ ] Visualize baseline predictions vs ground truth (example images)
+**4.1 (Optional) Baseline Model Implementation**
+- [ ] **Note:** Baseline models are optional. See `optional-basline-models-comparison.md` for implementation details.
+- [ ] If implementing baselines:
+  - [ ] **Threshold-based baseline:** Implement SWIR-based threshold detection, tune values, evaluate
+  - [ ] **Random Forest baseline:** Implement feature extraction, train classifier, evaluate
+  - [ ] Create baseline comparison report
+  - [ ] Visualize baseline predictions vs ground truth
 
 **4.2 U-Net Architecture Setup**
 - [ ] Set up `segmentation_models_pytorch` library
@@ -4077,13 +3871,13 @@ User acceptance testing (UAT) verifies that the system is usable and meets user 
 - [ ] Analyze temporal biases (performance by season)
 - [ ] Document error analysis findings
 
-**7.3 Baseline Comparison**
-- [ ] Compare final model with baseline models:
-  - [ ] Threshold-based baseline
-  - [ ] Random Forest baseline
-- [ ] Create comparison table (all metrics)
-- [ ] Visual comparison (same examples, all methods)
-- [ ] Document why deep learning outperforms (or investigate if it doesn't)
+**7.3 (Optional) Baseline Comparison**
+- [ ] **Note:** Baseline comparison is optional. Only if baselines were implemented (see `optional-basline-models-comparison.md`).
+- [ ] If baselines were implemented:
+  - [ ] Compare final model with baseline models (threshold-based, Random Forest)
+  - [ ] Create comparison table (all metrics)
+  - [ ] Visual comparison (same examples, all methods)
+  - [ ] Document why deep learning outperforms (or investigate if it doesn't)
 
 **7.4 Model Documentation**
 - [ ] Create model card:
@@ -4100,8 +3894,8 @@ User acceptance testing (UAT) verifies that the system is usable and meets user 
 - [ ] Export model in deployment format (PyTorch .pt)
 
 **Phase 2 Deliverables:**
-- ✅ Baseline models implemented and evaluated
 - ✅ U-Net model trained and optimized
+- ✅ (Optional) Baseline models implemented and evaluated (see `optional-basline-models-comparison.md`)
 - ✅ Hyperparameter tuning completed (Optuna results)
 - ✅ Final model evaluated on test set and Catalonia validation set
 - ✅ Comprehensive evaluation report with metrics and error analysis
@@ -4459,7 +4253,7 @@ User acceptance testing (UAT) verifies that the system is usable and meets user 
 
 **Parallel Work Opportunities:**
 - Data exploration can happen while downloading additional datasets
-- Baseline models can be implemented while setting up U-Net
+- (Optional) Baseline models can be implemented while setting up U-Net (see `optional-basline-models-comparison.md`)
 - API documentation can be written while developing UI
 - Some documentation can be written incrementally during development
 
