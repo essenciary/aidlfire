@@ -1759,7 +1759,7 @@ For a capstone project, we need a format that is:
 - ✅ **Reliable:** Guaranteed to work with PyTorch (same framework as training)
 - ✅ **Complete:** Saves all model weights exactly as trained
 - ✅ **Easy to load:** Simple loading code, well-documented
-- ✅ **Compatible:** Works with GCP Cloud Run, Streamlit, FastAPI
+- ✅ **Compatible:** Works with GCP Cloud Run, Streamlit (FastAPI optional)
 - ✅ **No conversion errors:** No risk of conversion bugs or precision loss
 
 **Limitations:**
@@ -1769,7 +1769,7 @@ For a capstone project, we need a format that is:
 
 **When to Use:**
 - **⭐ Recommended for capstone** - simplest and most reliable
-- Python-based deployment (GCP Cloud Run, Streamlit, FastAPI)
+- Python-based deployment (GCP Cloud Run, Streamlit - FastAPI optional)
 - When simplicity and reliability are more important than optimization
 
 **Export Process:**
@@ -2659,10 +2659,10 @@ For capstone, UI technology should minimize learning curve and development time,
 - **Well-documented:** Extensive documentation and examples
 - **GeoJSON support:** Easy to display fire polygons
 
-**Direct API calls:**
-- **Simple integration:** Fetch API for HTTP requests
+**Direct model integration:**
+- **Simple integration:** Load model directly in JavaScript/HTML app
 - **No backend complexity:** UI loads model directly, no separate API layer needed
-- **Clear separation:** UI and model/API are separate
+- **Clear separation:** UI and model are integrated in single application
 
 **Limitations:**
 - **JavaScript required:** Team needs JavaScript knowledge
@@ -2830,7 +2830,7 @@ For capstone, deployment should be straightforward and require minimal infrastru
 - **Automatic scaling:** Handles traffic automatically (scales to zero when not in use)
 
 **Framework support:**
-- **FastAPI:** Deploy FastAPI applications easily
+- **Streamlit:** Deploy Streamlit applications easily (FastAPI optional if separate API needed)
 - **Streamlit:** Deploy Streamlit applications
 - **Any Python app:** Flexible deployment options
 
@@ -2902,7 +2902,7 @@ Google Cloud Platform provides the best balance of simplicity, functionality, an
 
 | Service | Purpose | Why This Service |
 |---------|---------|------------------|
-| **Cloud Run** | Deploy FastAPI/Streamlit app | Serverless, pay-per-use, automatic scaling |
+| **Cloud Run** | Deploy Streamlit app (FastAPI optional) | Serverless, pay-per-use, automatic scaling |
 | **Cloud Storage** | Store model files (.pt) | Simple, cost-effective file storage |
 | **Cloud Build** | Build Docker images from Git | Automated builds, integrates with Git |
 | **Cloud Logging** | Application logs | Built-in, no setup needed |
@@ -3968,7 +3968,7 @@ User acceptance testing (UAT) verifies that the system is usable and meets user 
 **Built-in Buffers:**
 - Extra week in Phase 1 (data preparation often takes longer than expected)
 - Extra week in Phase 2 (model training and tuning can be unpredictable)
-- 2-week buffer in Phase 6 (testing and documentation always takes longer)
+- 2-week buffer in Phase 5 (testing and documentation always takes longer)
 
 **Early Warning Signs:**
 - **Week 3:** If data preparation is behind, prioritize core datasets only
@@ -4058,7 +4058,7 @@ User acceptance testing (UAT) verifies that the system is usable and meets user 
 **Application Libraries:**
 | Library | Purpose | PyPI | GitHub | Documentation |
 |---------|---------|------|--------|---------------|
-| FastAPI | API framework | [pypi.org/project/fastapi](https://pypi.org/project/fastapi/) | [github.com/tiangolo/fastapi](https://github.com/tiangolo/fastapi) | [fastapi.tiangolo.com](https://fastapi.tiangolo.com/) |
+| FastAPI | API framework (optional) | [pypi.org/project/fastapi](https://pypi.org/project/fastapi/) | [github.com/tiangolo/fastapi](https://github.com/tiangolo/fastapi) | [fastapi.tiangolo.com](https://fastapi.tiangolo.com/) |
 | Streamlit | Web app framework | [pypi.org/project/streamlit](https://pypi.org/project/streamlit/) | [github.com/streamlit/streamlit](https://github.com/streamlit/streamlit) | [docs.streamlit.io](https://docs.streamlit.io/) |
 
 **Data & Utility Libraries:**
@@ -4080,11 +4080,11 @@ User acceptance testing (UAT) verifies that the system is usable and meets user 
 | **Hyperparameter Tuning** | Optuna | 20-50 trials recommended |
 | **Geospatial Data** | rasterio, geopandas | Raster and vector data processing |
 | **Sentinel-2 Access** | sentinelsat, pystac-client, odc-stac | Copernicus Data Space API access |
-| **API** | FastAPI | REST API for detection endpoints |
+| **API** | Optional (see `optional_api_design.md`) | Not required - Streamlit loads model directly |
 | **Frontend** | Streamlit (recommended) | Simplified UI for capstone |
 | **Maps** | Folium | Interactive maps in Streamlit |
 | **Database** | SQLite or skip | Optional for simple demo |
-| **Deployment** | HuggingFace Spaces (recommended) | Free hosting for ML demos |
+| **Deployment** | GCP Cloud Run (recommended) | Serverless deployment using university credits |
 | **Model Format** | PyTorch (.pt) | Standard PyTorch checkpoint format |
 
 ### C. Glossary
