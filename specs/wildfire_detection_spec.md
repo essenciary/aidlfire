@@ -713,144 +713,111 @@ The primary goals are:
 ### 2.7 Data Versioning & Reproducibility
 
 **Why Data Versioning Matters:**
-- **Reproducibility:** Ensure experiments can be exactly reproduced months later
-- **Collaboration:** Team members can work with the same data versions
-- **Debugging:** Track which data version caused model performance changes
-- **Compliance:** Document data lineage for academic/research requirements
-- **Storage Efficiency:** Avoid storing duplicate datasets, use versioning instead
+- **Reproducibility:** Know exactly which data was used for each experiment (essential for capstone report)
+- **Debugging:** If model performance changes, identify if it's due to data or model changes
+- **Academic requirement:** Document data lineage for reproducibility
 
-**Challenge:** Satellite imagery datasets are large (GBs to TBs) and cannot be stored directly in Git repositories (which are designed for code, not large binary files).
-
-**⚠️ Data Size Reality Check:**
+**Reality Check:**
 - **Processed patches:** 256×256 patches with 7 bands ≈ 1.8 MB per patch
 - **CEMS-Wildfire (500 images):** ~5,000-10,000 patches ≈ **9-18 GB**
-- **EO4WildFires (31,730 events):** Could be 100,000+ patches ≈ **180+ GB**
 - **Even minimal dataset:** Likely **10-20 GB** of processed data
-- **GitHub LFS free tier:** Only **1 GB** (then $5/month per 50GB)
+- **Git/GitHub:** Cannot store large files (designed for code, not data)
 
-**Conclusion:** Git LFS is **NOT suitable** for storing processed datasets. The free tier (1GB) will be exceeded immediately, and costs would be $5-20/month. For a capstone project with non-developers, this is impractical.
+**Conclusion:** Store large datasets externally (cloud storage), document them in Git. Simple and free.
 
-**Recommendation:** Use **external storage** (Google Drive, Dropbox, university storage) for large datasets, and **Git LFS only for small files** (CSV, configs). This is simpler, free, and more appropriate for the project's data sizes.
+---
 
-#### 2.7.1 Recommended Approach: Hybrid Strategy (Best for This Project)
+#### 2.7.1 Simple Versioning Approach (Recommended)
 
-**Why This Approach:**
-- **Data sizes:** 10-20GB+ exceeds GitHub LFS free tier (1GB)
-- **Team:** Non-developers need simple, familiar tools
-- **Cost:** Free (no monthly fees)
-- **Simplicity:** Uses standard file sharing everyone knows
+**For Capstone Projects:**
 
-**Strategy:** Use **external storage** for large datasets + **Git LFS for small files only** + **manual versioning with checksums**
+**Step 1: Process and Store Data**
+1. Process your datasets (preprocessing, patching, normalization)
+2. Store processed data in cloud storage (Google Drive, Dropbox, university storage, or GCP Cloud Storage if using GCP)
+3. Organize in folders: `data/processed/cems-wildfire-v1/`
 
-**Recommended Setup:**
+**Step 2: Document in Git**
+Create a `data/README.md` file in your Git repository with:
 
-1. **Large Datasets (processed patches, imagery):**
-   - Store on **external drive, university network storage, or free cloud storage** (Google Drive, Dropbox, OneDrive)
-   - **Do NOT** commit to Git or Git LFS
-   - Document location in Git (README with download links or shared folder paths)
-   - Use checksums (MD5/SHA256) for integrity verification
+```markdown
+# Dataset Versions
 
-2. **Small Files (use Git LFS):**
-   - CSV files (fire perimeters, metadata)
-   - Configuration files
-   - Small GeoJSON files (<10MB)
-   - Model checkpoints (if <100MB each)
+## CEMS-Wildfire v1 (2026-01-15)
+- **Location:** [Google Drive link] or [GCP bucket path]
+- **Preprocessing:** Normalization (divide by 10000), 256×256 patches, 20m resolution
+- **Checksum:** `abc123def456...` (MD5 or SHA256)
+- **Train/Val/Test split:** Stored in `data/splits/v1/`
+- **Source:** HuggingFace dataset links-ads/wildfires-cems
+```
 
-3. **Versioning:**
-   - Store checksums and documentation in Git
-   - Use clear version naming: `cems-wildfire-v1-2026-01-15`
-   - Document data location and access instructions
+**Step 3: Link to Experiments**
+- In W&B, tag each training run with data version: `data-v1`
+- This links model results to the exact data used
 
-**Why This Works Better:**
-- ✅ **Free:** No storage costs
-- ✅ **Simple:** Team members just download from shared location
-- ✅ **Scalable:** Can handle TBs of data
-- ✅ **Familiar:** Uses standard file sharing (Drive, Dropbox, etc.)
-- ✅ **Reproducible:** Checksums ensure data integrity
+**Why This Works:**
+- ✅ **Simple:** One-time documentation, no complex tools
+- ✅ **Free:** Uses free cloud storage
+- ✅ **Reproducible:** Anyone can download the exact same data using the link
+- ✅ **Sufficient:** Meets academic requirements for reproducibility
 
-**Implementation Example:**
+---
 
-#### 2.7.2 Alternative: DVC with Cloud Storage (If Available)
+#### 2.7.2 When to Create New Versions
 
-**When to Consider:**
-- If you have access to **free cloud storage** (university S3/GCS account, research credits)
-- If datasets are **>50GB** and need automated versioning
-- If team is comfortable with command-line tools
+**Create a new version if:**
+- You change preprocessing (different normalization, patch size, etc.)
+- You fix data quality issues (remove bad samples, fix misaligned masks)
+- You add more datasets (combine CEMS-Wildfire + EO4WildFires)
+- You change train/val/test splits
 
-**Advantages:**
-- Automated versioning
-- Efficient storage (deduplication)
-- Pipeline tracking
-- Free if using university/research cloud credits
+**Naming convention:** `cems-wildfire-v2-2026-02-01` (dataset-name-version-date)
 
-**Quick Setup:**
+**If you only use one dataset with one preprocessing approach:**
+- One version is fine! Just document it clearly.
 
-#### 2.7.3 Git LFS - Only for Small Files
+---
 
-Git LFS (Large File Storage) is a Git extension that stores large files outside the main Git repository. However, **for this project, Git LFS should only be used for small files** due to storage limits.
+#### 2.7.3 Data Integrity (Checksums)
 
-**GitHub LFS Limits:**
-- **Free tier:** 1GB storage, 50GB/month bandwidth
-- **Cost:** $5/month per 50GB storage
-- **Reality:** Your processed datasets (10-20GB+) exceed free tier immediately
+**Why checksums?**
+- Verify data wasn't corrupted during download/transfer
+- Ensure everyone uses the exact same files
 
-**When to Use Git LFS in This Project:**
-- ✅ Small CSV files (fire perimeters, metadata)
-- ✅ Configuration files
-- ✅ Small GeoJSON files (<10MB)
-- ✅ Model checkpoints (if <100MB each)
-- ❌ **Do NOT use for:** Processed image patches, large datasets, full imagery
+**How to do it:**
+1. Calculate checksum after processing: `md5sum data/processed/cems-wildfire-v1/*.npy > data-checksums-v1.txt`
+2. Store checksum file in Git: `data/data-checksums-v1.txt`
+3. Verify before using: `md5sum -c data-checksums-v1.txt`
 
-**Git LFS Setup (for small files only):**
+**Optional but recommended:** Helps catch data corruption issues early.
 
-#### 2.7.4 Alternative: Manual Versioning (Simplest for Non-Developers)
+---
 
-**When to Use:** If Git LFS and DVC are too complex, use manual versioning with checksums. This is the simplest approach but requires more manual work.
+#### 2.7.4 Integration with Experiment Tracking
 
-**How it Works:**
-- Store actual data files outside Git (external drive, cloud storage, shared folder)
-- Calculate checksums (MD5 or SHA256) for all data files
-- Store checksums and documentation in Git
-- Manually verify checksums before using data
+**Link data versions to W&B runs:**
+- When starting training, log data version as a tag: `wandb.run.tags = ["data-v1"]`
+- Or log as config parameter: `wandb.config["data_version"] = "cems-wildfire-v1-2026-01-15"`
 
-**Manual Versioning Requirements:**
-- ✅ Store checksums (MD5 or SHA256) for all files
-- ✅ Document dataset version, date, source, preprocessing steps
-- ✅ Store data in organized folders with version numbers
-- ✅ Document data location (external drive, cloud link, etc.)
-- ✅ Verify checksums before using data: `md5sum -c data-checksums-v1.txt`
+**This ensures:**
+- You can always see which data version produced which results
+- Essential for comparing experiments and writing your report
 
-#### 2.7.5 Data Versioning Requirements for This Project
+---
 
-**How to Do It:** Create a systematic versioning workflow: download datasets to external storage, compute checksums (MD5 or SHA256) for all files, store checksums and metadata in Git. Use clear naming convention with version numbers and dates. For each dataset version, document preprocessing parameters, split indices, and link to experiment tracking. Store small files (CSV, configs) in Git LFS, keep large datasets externally with access instructions. Tag important versions in Git and maintain a changelog documenting changes between versions.
+#### 2.7.5 Data Versioning Checklist
 
 **Minimum Requirements:**
-- [ ] Version all datasets with clear naming (e.g., `cems-wildfire-v1-2026-01-15`)
-- [ ] Store dataset checksums/hashes (MD5 or SHA256) in Git
-- [ ] Document preprocessing parameters and versions
-- [ ] Link data versions to experiment tracking (see Section 3.5)
-- [ ] Store train/val/test split indices for reproducibility
+- [ ] Store processed data in cloud storage (Google Drive, Dropbox, or GCP Cloud Storage)
+- [ ] Create `data/README.md` documenting:
+  - Dataset name and version
+  - Cloud storage link or path
+  - Preprocessing steps used
+  - Checksum (optional but recommended)
+- [ ] Store train/val/test split indices in Git (small files, can commit directly)
+- [ ] Tag W&B experiments with data version name
 - [ ] Document data source URLs and download dates
-- [ ] **Document data storage location** (external drive, cloud storage link, shared folder)
 
-**Recommended Approach (Hybrid):**
-- [ ] Store large datasets externally (Google Drive, Dropbox, university storage)
-- [ ] Use Git LFS only for small files (CSV, configs, small JSON)
-- [ ] Store checksums and documentation in Git
-- [ ] Tag important data versions in Git: `git tag data-v1.0`
-- [ ] Create README in `data/` folder with download/access instructions
-- [ ] Create data version changelog (what changed between versions)
-- [ ] Store data processing scripts with data versions
-- [ ] Document storage location and access instructions
-
-#### 2.7.6 Integration with Experiment Tracking
-
-**Link Data Versions to Experiments:**
-- In W&B (Weights & Biases), log data version as a tag or config parameter
-- In MLflow, store data version in experiment metadata
-- In DVC, use `dvc.yaml` to track data → model pipeline
-
-This ensures you can always identify which data version was used for each experiment.
+**That's it!** Simple, practical, and sufficient for capstone reproducibility.
 
 ### 2.8 Data Quality & Exploration
 
