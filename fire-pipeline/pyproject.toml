@@ -1,0 +1,80 @@
+[project]
+name = "fire-pipeline"
+version = "0.1.0"
+description = "Patch generation pipeline for CEMS Wildfire Dataset"
+requires-python = ">=3.12"
+dependencies = [
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.1",
+    "pandas>=2.0.0",
+    "pillow>=12.1.0",
+    "rasterio>=1.5.0",
+    "tqdm>=4.65.0",
+]
+
+[project.optional-dependencies]
+torch = ["torch>=2.0.0", "albumentations>=1.3.0"]
+download = ["huggingface_hub>=0.20.0"]
+train = [
+    "torch>=2.0.0",
+    "albumentations>=1.3.0",
+    "segmentation-models-pytorch>=0.3.0",
+    "torchmetrics>=1.0.0",
+    "wandb>=0.15.0",
+]
+app = [
+    "streamlit>=1.30.0",
+    "folium>=0.15.0",
+    "streamlit-folium>=0.15.0",
+    "planetary-computer>=1.0.0",
+    "pystac-client>=0.7.0",
+    "scipy>=1.11.0",
+    "torch>=2.0.0",
+    "segmentation-models-pytorch>=0.3.0",
+]
+all = [
+    "torch>=2.0.0",
+    "albumentations>=1.3.0",
+    "segmentation-models-pytorch>=0.3.0",
+    "torchmetrics>=1.0.0",
+    "wandb>=0.15.0",
+    "huggingface_hub>=0.20.0",
+    "streamlit>=1.30.0",
+    "folium>=0.15.0",
+    "streamlit-folium>=0.15.0",
+    "planetary-computer>=1.0.0",
+    "pystac-client>=0.7.0",
+    "scipy>=1.11.0",
+]
+test = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "torch>=2.0.0",
+    "albumentations>=1.3.0",
+    "segmentation-models-pytorch>=0.3.0",
+]
+
+[project.scripts]
+generate-patches = "patch_generator:main"
+run-pipeline = "run_pipeline:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::UserWarning",
+]
+
+[tool.coverage.run]
+source = ["."]
+omit = ["tests/*", "**/__pycache__/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]

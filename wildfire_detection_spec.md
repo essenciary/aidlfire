@@ -1,0 +1,4131 @@
+# Catalonia Wildfire Detection System
+
+## Technical Specification Document
+
+**Project Type:** Postgraduate Capstone Project
+**Domain:** Computer Vision / Remote Sensing
+**Region:** Catalonia, Spain
+**Date:** January 2026
+
+---
+
+## Table of Contents
+
+1. [Project Overview](#1-project-overview)
+   - 1.1 [Objective](#11-objective)
+   - 1.2 [High-Level Pipeline](#12-high-level-pipeline)
+   - 1.3 [Key Deliverables](#13-key-deliverables)
+   - 1.4 [Success Criteria](#14-success-criteria)
+2. [Data Pipeline](#2-data-pipeline)
+   - 2.1 [Training Datasets](#21-training-datasets)
+   - 2.2 [Live Data Sources](#22-live-data-sources)
+   - 2.3 [Data Preprocessing](#23-data-preprocessing)
+   - 2.4 [Data Augmentation](#24-data-augmentation)
+   - 2.5 [Dataset Split Strategy](#25-dataset-split-strategy)
+   - 2.6 [Class Imbalance Handling](#26-class-imbalance-handling)
+   - 2.7 [Data Versioning & Reproducibility](#27-data-versioning--reproducibility)
+   - 2.8 [Data Quality & Exploration](#28-data-quality--exploration)
+3. [Model Development](#3-model-development)
+   - 3.1 [Architecture Selection](#31-architecture-selection)
+   - 3.2 [Training Configuration](#32-training-configuration)
+   - 3.3 [Model Optimization](#33-model-optimization)
+   - 3.4 [Experiment Tracking & MLOps](#34-experiment-tracking--mlops)
+   - 3.5 [Evaluation Metrics](#35-evaluation-metrics)
+4. [Application Features](#4-application-features)
+   - 4.1 [Core Features](#41-core-features)
+   - 4.2 [Advanced Features](#42-advanced-features)
+5. [User Interface](#5-user-interface-simplified-for-capstone)
+   - 5.1 [Technology Stack - Simplified Options](#51-technology-stack---simplified-options)
+   - 5.2 [Simplified UI Structure (Streamlit Example)](#52-simplified-ui-structure-streamlit-example)
+6. [Deployment](#6-deployment-simplified-for-capstone)
+   - 6.1 [Simplified Deployment Options](#61-simplified-deployment-options)
+   - 6.2 [Recommended Approach: Google Cloud Platform](#62-recommended-approach-google-cloud-platform)
+   - 6.3 [Alternative: Simple Cloud Deployment (If Needed)](#63-alternative-simple-cloud-deployment-if-needed)
+7. [Testing & Validation](#7-testing--validation)
+   - 7.1 [Testing Levels](#71-testing-levels)
+   - 7.2 [Catalonia Validation Set (Mandatory)](#72-catalonia-validation-set-mandatory)
+   - 7.3 [Performance Benchmarks](#73-performance-benchmarks)
+   - 7.4 [User Acceptance Testing](#74-user-acceptance-testing)
+8. [Project Timeline](#8-project-timeline)
+   - 8.1 [Phase Overview](#81-phase-overview)
+   - 8.2 [Detailed Implementation Plan](#82-detailed-implementation-plan)
+   - 8.3 [Task Dependencies & Critical Path](#83-task-dependencies--critical-path)
+   - 8.4 [Resource Requirements](#84-resource-requirements)
+   - 8.5 [Risk Mitigation in Timeline](#85-risk-mitigation-in-timeline)
+[Appendix](#appendix)
+   - A. [Resource Links](#a-resource-links)
+   - B. [Technology Stack Summary](#b-technology-stack-summary)
+   - C. [Glossary](#c-glossary)
+   - D. [ML Documentation Deliverables](#d-ml-documentation-deliverables)
+
+---
+
+## 1. Project Overview
+
+### 1.1 Objective
+
+Build a deep learning system that detects active wildfires and burned areas from Sentinel-2 satellite imagery, with a focus on the Catalonia region. The system will provide near-real-time detection capabilities, fire area measurement, spread analysis, and automated alerts.
+
+### 1.2 High-Level Pipeline
+
+The wildfire detection system follows a multi-stage pipeline from satellite imagery acquisition to user-facing results:
+
+1. **Data Acquisition:** Fetch Sentinel-2 L2A satellite imagery from Copernicus Data Space Ecosystem for specified geographic regions and dates
+2. **Preprocessing:** Extract and normalize 7 spectral bands (B2, B3, B4, B8, B8A, B11, B12), resample to consistent resolution (20m), and extract 256×256 pixel patches
+3. **Model Inference:** Process patches through trained U-Net segmentation model to generate pixel-level fire probability maps
+4. **Post-processing:** Apply detection threshold, extract fire polygons from probability maps, filter small detections (<0.1 ha), and calculate fire area metrics
+5. **User Interface:** Provide interactive web dashboard (Streamlit) with map visualization, detection controls, and result export capabilities. Model is loaded directly in Streamlit (no separate API needed).
+
+**Data Flow:** Satellite Imagery → Preprocessing → Model Inference → Post-processing → UI → User Results
+
+**Note:** API implementation is optional. See `optional_api_design.md` if you want to implement a separate API layer for separation of concerns.
+
+### 1.3 Key Deliverables
+
+| Deliverable | Description |
+|-------------|-------------|
+| Trained Model | Segmentation model for fire/burned area detection |
+| Web Dashboard | Interactive map with fire overlays and statistics (Streamlit) |
+| Web Dashboard | Interactive map with fire overlays and statistics |
+| Documentation | Technical docs, user guide, reproducibility guide |
+| Deployed System | Cloud-hosted, accessible application |
+
+### 1.4 Success Criteria
+
+| Metric | Target | Description |
+|--------|--------|-------------|
+| Model IoU (Intersection over Union) | ≥ 0.70 | Measures overlap between predicted and ground truth fire areas. Formula: `IoU = TP / (TP + FP + FN)`. A score of 0.70 means 70% of the combined predicted and actual fire area overlaps correctly. This is the primary segmentation quality metric. |
+| Model Dice Score | ≥ 0.80 | Harmonic mean of precision and recall, emphasizing overlap. Formula: `Dice = 2TP / (2TP + FP + FN)`. More forgiving than IoU for small fires. A score of 0.80 indicates strong overlap between predictions and ground truth. |
+| Detection Precision | ≥ 0.85 | Fraction of predicted fires that are actually real fires. Formula: `Precision = TP / (TP + FP)`. A score of 0.85 means 85% of detections are correct, minimizing false alarms. Critical for alert reliability. |
+| Detection Recall | ≥ 0.80 | Fraction of real fires that are successfully detected. Formula: `Recall = TP / (TP + FN)`. A score of 0.80 means the model catches 80% of actual fires. Important for not missing dangerous fires. |
+| UI Response Time | < 30 seconds for single tile | Time from user clicking "Run Detection" to results display. Includes imagery fetching, model inference, and post-processing. Less critical for capstone than model metrics. |
+| System Uptime | ≥ 99% | Percentage of time the system is available and operational. Less critical for capstone project where model quality is the primary focus. |
+
+---
+
+## 2. Data Pipeline
+
+### 2.1 Training Datasets
+
+#### 2.1.1 Primary Datasets (Recommended)
+
+| Dataset | Source | Size | Resolution | Coverage | Key Features | URL |
+|---------|--------|------|------------|----------|--------------|-----|
+| **CEMS-Wildfire** | HuggingFace/GitHub | 500+ images | 10m | Europe (includes Spain) | Delineation + severity masks, cloud/landcover masks, 2017-2023 | [HuggingFace (links-ads)](https://huggingface.co/datasets/links-ads/wildfires-cems), [HuggingFace (9334hq)](https://huggingface.co/datasets/9334hq/wildfires-cems), [GitHub](https://github.com/MatteoM95/CEMS-Wildfire-Dataset) |
+| **EO4WildFires** | HuggingFace | 31,730 events | 10-20m | 45 countries (2018-2022) | Sentinel-2 + SAR + meteorological, EFFIS annotations, multi-modal | [HuggingFace](https://huggingface.co/datasets/AUA-Informatics-Lab/eo4wildfires) |
+| **Sen2Fire** | GitHub/arXiv | 2,466 patches | 10-20m | Australia | Sentinel-2 (13 bands) + Sentinel-5P aerosol, spectral indices | [Paper](https://arxiv.org/abs/2403.17884), [GitHub](https://github.com/Orion-AI-Lab/Sen2Fire) |
+| **Land8Fire** | MDPI Data | ~20,000 patches | 30m | Global | Landsat-8 multispectral, human-annotated segmentation, diverse geography | [Paper/Dataset](https://www.mdpi.com/2072-4292/17/16/2776) |
+| **TS-SatFire** | Nature Sci Data | 3,552 images | 375-750m | US (2017-2021) | Multi-temporal, active fire + burned area + prediction tasks, auxiliary data (weather/topography) | [Paper](https://arxiv.org/abs/2412.11555), [Nature Data](https://www.nature.com/articles/s41597-025-06271-3) |
+
+#### 2.1.2 Secondary/Supporting Datasets
+
+| Dataset | Source | Size | Resolution | Coverage | Use Case | URL |
+|---------|--------|------|------------|----------|----------|-----|
+| **S2-WCD** | IEEE DataPort | 41 image pairs | 20m | Europe & Oceania (includes Spain) | Pre/post change detection, Mediterranean fires | [IEEE DataPort](https://ieee-dataport.org/documents/sentinel-2-wildfire-change-detection-s2-wcd) |
+| **FireSR** | Zenodo | Large fires | 10-20m | Canada (>2000 ha) | Pre/post Sentinel-2, NBAC masks, land use/weather data | [Zenodo](https://zenodo.org/records/13384289) |
+| **FLOGA** | arXiv | Greek events | 10-20m | Greece | Sentinel-2 + MODIS, expert annotations, change detection | [Paper](https://arxiv.org/abs/2311.03339) |
+| **Active Fire (Landsat-8)** | arXiv | 150k+ patches | 30m | Global | Large-scale, manual + auto labels, transfer learning | [Paper](https://arxiv.org/abs/2101.03409) |
+
+#### 2.1.3 Dataset Selection Rationale
+
+**Primary Dataset: CEMS-Wildfire (Recommended)**
+- **Strengths:**
+  - Directly from Copernicus Emergency Management Service (authoritative source)
+  - Includes Spanish fire events (relevant for Catalonia)
+  - Rich annotations: delineation masks, severity grading, cloud masks, land cover masks
+  - Same sensor (Sentinel-2) as live data → minimal domain shift
+  - Well-documented and accessible via HuggingFace
+  - Temporal coverage: 2017-2023
+- **Limitations:**
+  - Moderate size (~500 images)
+  - Primarily European coverage
+  - May need data augmentation for robust training
+  - **Note:** Dataset viewer on HuggingFace may have limitations due to tar archive format; data is accessible but may require manual extraction
+  - **Alternative:** CEMS-HLS (morenoj11/CEMS-HLS) available if primary dataset has access issues
+
+**Secondary Dataset: EO4WildFires (Strong Addition)**
+- **Strengths:**
+  - **Very large:** 31,730 events across 45 countries (2018-2022)
+  - **Multi-modal:** Sentinel-2 + SAR + meteorological data
+  - **Excellent for generalization:** Geographic diversity across multiple continents
+  - **EFFIS annotations:** European Forest Fire Information System ground truth
+  - **Temporal depth:** Multi-temporal sequences for progression modeling
+- **Limitations:**
+  - More complex preprocessing (SAR alignment, multi-modal fusion)
+  - Larger storage/compute requirements
+  - Learning curve for multi-modal data handling
+
+**Secondary Dataset: Sen2Fire**
+- **Strengths:**
+  - Good spectral richness (13 Sentinel-2 bands + aerosol data)
+  - Includes spectral indices (NDVI, NBR) pre-computed
+  - Well-suited for segmentation tasks
+  - Transferable to other regions (Australia → Mediterranean)
+- **Limitations:**
+  - Moderate size (2,466 patches)
+  - Patch-based (may lack full temporal sequences)
+
+**Secondary Dataset: Land8Fire**
+- **Strengths:**
+  - **Large size:** ~20,000 patches
+  - **Global coverage:** Diverse geographies for generalization testing
+  - **Human-annotated:** High-quality segmentation masks
+  - **Multi-spectral:** 10 Landsat-8 bands
+- **Limitations:**
+  - Coarser resolution (30m vs 10-20m Sentinel-2)
+  - Less frequent revisit time (~16 days)
+  - Primarily static (before/after) rather than temporal sequences
+
+**Supporting Dataset: TS-SatFire (If Time Permits)**
+- **Strengths:**
+  - **Multi-task:** Active fire detection, burned area mapping, AND next-day prediction
+  - **Auxiliary data:** Weather, topography, land cover, fuel loads
+  - **Temporal sequences:** Time-series data for progression modeling
+  - Excellent for demonstrating advanced ML capabilities
+- **Limitations:**
+  - Coarse spatial resolution (375-750m) - may miss small fires
+  - Large dataset size (~71 GB)
+  - US-only coverage (limited geographic diversity)
+  - More complex pipeline (temporal alignment, auxiliary data fusion)
+
+#### 2.1.4 Recommended Dataset Strategy
+
+**For Capstone Project (ML Focus):**
+
+1. **Primary Training Dataset:** CEMS-Wildfire
+   - Use for main model development
+   - Well-documented, manageable size
+   - Good for segmentation tasks
+
+2. **Augmentation Dataset:** EO4WildFires (if feasible) OR Sen2Fire
+   - **EO4WildFires:** Best for geographic generalization (if team can handle multi-modal complexity)
+   - **Sen2Fire:** Simpler alternative, good spectral richness
+   - Use to increase dataset diversity and test generalization
+
+3. **Evaluation/Testing:** Land8Fire
+   - Use for robustness evaluation
+   - Test geographic generalization
+   - Compare performance across different regions
+
+4. **Optional (If Time):** TS-SatFire
+   - Only if team wants to demonstrate prediction/progression tasks
+   - Requires more complex pipeline setup
+   - Good for showing advanced ML capabilities
+
+**Dataset Combination Strategy:**
+- Train primarily on CEMS-Wildfire (Europe, including Spain)
+- Augment with EO4WildFires or Sen2Fire for diversity
+- Evaluate on Land8Fire (global) + Catalonia validation set
+- Ensures geographic generalization while maintaining focus on European/Mediterranean fires
+
+#### 2.1.3 Catalonia-Specific Data (Mandatory)
+
+| Source | Data Type | Use | URL |
+|--------|-----------|-----|-----|
+| Generalitat de Catalunya | Historical fire perimeters | **Create local validation set (required)** | [Fire perimeters by county (2011-2023)](https://analisi.transparenciacatalunya.cat/api/views/bks7-dkfd/rows.csv?accessType=DOWNLOAD), [Civil Protection Risk Map](https://datos.gob.es/en/catalogo/a09002970-mapa-de-proteccion-civil-de-cataluna-riesgo-de-incendios-forestales) |
+| ICGC | Satellite-derived burn maps, Land cover | Additional labels, vegetation context | [CatLC Dataset](https://www.icgc.cat/en/Geoinformation-and-Maps/Maps/Dataset-Land-cover-map-CatLC), [FTP Download](https://ftp.icgc.cat/descarregues/CatLCNet), [Nature Paper](https://www.nature.com/articles/s41597-022-01674-y) |
+| PREVINCAT (CTFC) | Vegetation maps, fuel models, fire perimeters | Risk context, fuel load data | [PREVINCAT Server](https://previncat.ctfc.cat/en/index.html), [MDPI Paper](https://www.mdpi.com/2072-4292/12/24/4124) (may require direct access) |
+| Copernicus EMS | Rapid mapping activations | Event-based burned area maps | [2022 Catalonia Fire Event](https://data.jrc.ec.europa.eu/dataset/7d5a5041-efac-4762-b9d1-c0b290ab2ce7) |
+
+**Note:** Creating a Catalonia-specific validation set is mandatory for this project, as it demonstrates geographic generalization and regional applicability.
+
+**Additional Catalonia Resources:**
+- **Wildland-Urban Interface (WUI) Map:** [Dataset](https://pdxscholar.library.pdx.edu/esm_fac/215/) - 150m resolution raster for vulnerability assessment
+- **Fire Sondes Data:** [Zenodo](https://zenodo.org/records/6424854) - Atmospheric data from active fire events (2021)
+- **Drought & Wildfire Variables:** [Zenodo](https://zenodo.org/records/14979237) - Monthly observations by county
+
+### 2.2 Live Data Sources
+
+#### 2.2.1 Sentinel-2 via Copernicus Data Space Ecosystem
+
+**Primary Source: Copernicus Data Space Ecosystem**
+
+| Attribute | Value | Details |
+|-----------|-------|---------|
+| Access URL | https://browser.dataspace.copernicus.eu/ | Web browser interface |
+| Product | Sentinel-2 L2A | Atmospherically corrected, surface reflectance |
+| Revisit Time | ~5 days (equator), **~2-3 days (Catalonia ~42°N)** | Faster at higher latitudes due to orbit overlap |
+| Latency | 2-4 hours after satellite pass | Processing time for L2A product |
+| Cost | Free | Open access for research and commercial use |
+| Spatial Resolution | 10m (RGB, NIR), 20m (SWIR) | Native resolution |
+| Temporal Coverage | 2015-present | Historical archive available |
+
+**API Access Options:**
+
+| API Type | Description | Python Library | Use Case |
+|----------|-------------|----------------|----------|
+| **STAC API** | SpatioTemporal Asset Catalog - modern standard | `pystac-client`, `odc-stac` | Recommended for programmatic access |
+| **OData API** | Open Data Protocol - RESTful queries | `requests`, `odata` | Legacy but still supported |
+| **Sentinel Hub API** | Commercial service (free tier available) | `sentinelhub` | High-level interface, processing on-demand |
+| **Direct Download** | Via browser or wget/curl | `sentinelsat` | Bulk downloads, historical data |
+
+**Recommended Python Libraries:**
+
+| Library | Purpose | PyPI | GitHub | Documentation |
+|---------|---------|------|--------|---------------|
+| **`sentinelsat`** | Search and download Sentinel-2 products via Copernicus Open Access Hub | [pypi.org/project/sentinelsat](https://pypi.org/project/sentinelsat/) | [github.com/sentinelsat/sentinelsat](https://github.com/sentinelsat/sentinelsat) | [sentinelsat.readthedocs.io](https://sentinelsat.readthedocs.io/) |
+| **`pystac-client`** | Modern STAC API client for searching and accessing Sentinel-2 data | [pypi.org/project/pystac-client](https://pypi.org/project/pystac-client/) | [github.com/stac-utils/pystac-client](https://github.com/stac-utils/pystac-client) | [pystac-client.readthedocs.io](https://pystac-client.readthedocs.io/) |
+| **`odc-stac`** | Open Data Cube integration with STAC for efficient data loading | [pypi.org/project/odc-stac](https://pypi.org/project/odc-stac/) | [github.com/opendatacube/odc-stac](https://github.com/opendatacube/odc-stac) | [datacube-core.readthedocs.io](https://datacube-core.readthedocs.io/) (ODC docs) |
+| **`sentinelhub`** | High-level API for on-demand processing (requires account) | [pypi.org/project/sentinelhub](https://pypi.org/project/sentinelhub/) | [github.com/sentinel-hub/sentinelhub-py](https://github.com/sentinel-hub/sentinelhub-py) | [sentinelhub-py.readthedocs.io](https://sentinelhub-py.readthedocs.io/) |
+
+**Access Requirements:**
+- Free registration at https://dataspace.copernicus.eu/
+- OAuth2 authentication for API access
+- API credentials (client ID/secret) for programmatic access
+
+**Rate Limits:**
+- Browser access: No strict limits
+- API access: Reasonable use policy (typically 1000 requests/hour)
+- Download bandwidth: No hard limits, but throttling may apply during peak times
+
+#### 2.2.2 Alternative Live Data Sources
+
+**For Active Fire Detection (Near-Real-Time):**
+
+| Source | Latency | Coverage | Data Type | Access | URL |
+|--------|---------|----------|-----------|--------|-----|
+| **NASA FIRMS** | 3-6 hours (global), <1 min (US/Canada URT) | Global | MODIS/VIIRS hotspots | Public API, CSV/GeoJSON | [Portal](https://firms.modaps.eosdis.nasa.gov/), [API](https://firms.modaps.eosdis.nasa.gov/api/), [Data Download](https://firms.modaps.eosdis.nasa.gov/active_fire/) |
+| **EFFIS Active Fires** | Multiple times daily | Europe (includes Catalonia) | MODIS/VIIRS + Sentinel-2 | EFFIS portal, API available | [Portal](https://effis.jrc.ec.europa.eu/) (use Current Situation section for active fires) |
+| **Eye on the Fire** | <15 minutes | Global | Aggregated multi-source | REST API (may require key) | [API Documentation](https://eyeonthefire.com/data-sources) |
+
+**For Fire Perimeters & Burned Areas:**
+
+| Source | Update Frequency | Coverage | Data Type | Access | URL |
+|--------|------------------|----------|-----------|--------|-----|
+| **EFFIS Burned Areas** | Twice daily (fire season) | Europe | Sentinel-2 derived perimeters | EFFIS portal | [Portal](https://effis.jrc.ec.europa.eu/) (use Current Situation section for burned areas) |
+| **Copernicus EMS Rapid Mapping** | On activation | Global (Europe focus) | High-res delineation, grading | JRC Data Portal | [Data Portal](https://emergency.copernicus.eu/data), [JRC Dataset Portal](https://data.jrc.ec.europa.eu/) |
+| **NIFC (US)** | Daily/sub-daily | US only | Fire perimeters, incidents | ArcGIS services | [NIFC Portal](https://www.nifc.gov/), [ArcGIS Map Services](https://www.nifc.gov/fire-information/nifc-maps) |
+
+**For Fire Risk & Forecasting:**
+
+| Source | Update Frequency | Coverage | Data Type | Access | URL |
+|--------|------------------|----------|-----------|--------|-----|
+| **EFFIS Fire Danger** | Daily, 10-day forecast | Europe | Fire danger indices | EFFIS portal | [Portal](https://effis.jrc.ec.europa.eu/) (use Fire Danger Forecast section) |
+| **PREVINCAT Dynamic Scenarios** | Hourly (on risk days) | Catalonia | Meteorological risk scenarios | PREVINCAT server | [PREVINCAT Server](https://previncat.ctfc.cat/en/index.html) |
+| **Ambee Fire API** | Hourly (fires), weekly (risk) | Global (NA forecasts) | Active fires + risk forecasts | REST API (tiered) | [API Documentation](https://www.getambee.com/api/fire), [Developer Portal](https://www.getambee.com/developers) |
+
+**Note on URL Validation:** All URLs in this section follow standard patterns for official government and research organization portals. Test scripts are provided in the `tests/` directory for local validation:
+- `test_live_data_urls.sh` - Validates live data source URLs
+- `test_catalonia_urls.sh` - Validates Catalonia-specific data URLs
+- `test_python_library_urls.sh` - Validates Python library documentation URLs
+
+Run with: `bash tests/test_live_data_urls.sh`
+
+#### 2.2.3 Recommended Data Source Strategy
+
+**For Model Training:**
+- **Primary:** Copernicus Data Space (Sentinel-2 L2A) - historical archive for training
+- **Validation:** EFFIS burned areas, Copernicus EMS activations for ground truth
+
+**For Live Inference:**
+- **Imagery:** Copernicus Data Space (Sentinel-2 L2A) - latest available scenes
+- **Active Fire Detection:** NASA FIRMS or EFFIS for real-time hotspots (optional validation)
+- **Auxiliary:** PREVINCAT for fuel/weather context
+
+**For Alerts & Monitoring:**
+- **Primary:** NASA FIRMS (global coverage, frequent updates)
+- **Regional:** EFFIS Active Fires (Europe-specific, higher resolution)
+- **Local:** PREVINCAT dynamic scenarios (Catalonia-specific risk)
+
+#### 2.2.4 Sentinel-2 Band Specification
+
+| Band | Name | Wavelength (nm) | Resolution | Role in Fire Detection |
+|------|------|-----------------|------------|----------------------|
+| B2 | Blue | 490 | 10m | RGB visualization, water body detection |
+| B3 | Green | 560 | 10m | RGB visualization, vegetation health |
+| B4 | Red | 665 | 10m | RGB visualization, vegetation indices (NDVI) |
+| B8 | NIR | 842 | 10m | Vegetation indices (NDVI, NBR), vegetation health |
+| B8A | NIR Narrow | 865 | 20m | Improved vegetation indices, better atmospheric correction |
+| B11 | SWIR 1 | 1610 | 20m | **Primary fire detection** (thermal signature) |
+| B12 | SWIR 2 | 2190 | 20m | **Primary fire/burn scar detection** (charcoal, ash) |
+
+**Selected bands for model input:** B2, B3, B4, B8, B8A, B11, B12 (7 bands total)
+
+**Additional Useful Bands (Optional):**
+- **B10 (Cirrus):** Cloud detection and masking
+- **B5, B6, B7 (Red Edge):** Enhanced vegetation analysis
+- **SCL (Scene Classification Layer):** Automated cloud/land cover classification
+
+**Band Selection Rationale:**
+- SWIR bands (B11, B12) are critical for fire detection due to sensitivity to high temperatures and burned materials
+- RGB bands (B2, B3, B4) enable visualization and vegetation health assessment
+- NIR bands (B8, B8A) support vegetation indices (NDVI, NBR) which help distinguish burned areas
+- Resolution: 7-band selection balances information content with computational efficiency
+
+### 2.3 Data Preprocessing
+
+#### 2.3.1 Resolution Harmonization
+
+| Approach | Description | Trade-off |
+|----------|-------------|-----------|
+| **Option A: Resample to 20m** | Downsample 10m bands to match SWIR | Simpler, loses some detail |
+| **Option B: Resample to 10m** | Upsample 20m bands (bilinear) | Preserves detail, interpolation artifacts |
+
+**Recommendation:** Resample all bands to 20m for consistency with SWIR bands, which are most critical for fire detection.
+
+#### 2.3.2 Normalization Strategy
+
+Normalization scales raw pixel values to a consistent range (typically 0-1) so neural networks can process them efficiently. Sentinel-2 stores reflectance as integers (0-10,000, where 10,000 = 100% reflectance), but models work better with smaller, standardized values.
+
+**Why Normalize?**
+
+- **Numerical stability:** Large values can cause overflow/underflow during training
+- **Faster convergence:** Smaller values help gradients and training stability
+- **Consistent scale:** Different bands have different value ranges
+- **Model compatibility:** Pretrained encoders expect specific input ranges
+
+**Normalization Methods:**
+
+| Method | Description | When to Use |
+|--------|-------------|-------------|
+| **Reflectance scaling** | Divide by 10,000 | **Standard for Sentinel-2 (recommended)** |
+| Min-max per band | Scale to [0,1] using dataset statistics | Alternative |
+| Z-score standardization | (x - mean) / std per band | If using pretrained ImageNet encoder (test if needed) |
+
+**Reflectance Scaling (Recommended):**
+
+- **What it does:** Divides pixel values by 10,000 (e.g., 8,500 → 0.85)
+- **Result:** Values in [0, 1] range, preserving physical meaning (0.85 = 85% reflectance)
+- **Why recommended:** Standard for Sentinel-2, simple, maintains physical interpretation
+- **Example:** A pixel with value 8,500 (85% reflectance) becomes 0.85 after normalization
+
+**Recommendation:** Use reflectance scaling (divide by 10,000) as the default. This is the standard approach for Sentinel-2 data and maintains physical meaning of reflectance values. If using pretrained ImageNet encoders, test whether additional normalization is needed, but start with reflectance scaling.
+
+#### 2.3.3 Patch Extraction
+
+Patch extraction divides large satellite images into smaller, fixed-size squares (patches) that the model can process. Full Sentinel-2 scenes are too large (e.g., 10,980×10,980 pixels) for GPU memory, so we break them into manageable pieces.
+
+**Why Extract Patches?**
+
+- **Memory limits:** GPUs cannot fit entire scenes in memory
+- **Training efficiency:** Smaller inputs train faster and more stably
+- **Standardization:** All patches are the same size (256×256) for consistent processing
+- **More training examples:** One large image becomes many patches, increasing dataset size
+
+**Patch Extraction Parameters:**
+
+| Parameter | Value | Rationale |
+|-----------|-------|-----------|
+| Patch size | **256×256** | Standardized size for consistency across datasets |
+| Stride (training) | 128 pixels | Overlapping for augmentation |
+| Stride (inference) | 256 pixels | Non-overlapping with edge blending |
+| Cloud filtering | Discard patches with >50% cloud | Use SCL band or cloud mask |
+
+**Parameter Details:**
+
+**Patch Size (256×256 pixels):**
+- Each patch is 256 pixels wide × 256 pixels tall
+- At 10m resolution, this equals 2.56 km × 2.56 km
+- Standard size in deep learning (powers of 2), balances detail and memory
+
+**Stride (Training: 128 pixels):**
+- Patches overlap by 50% (256 - 128 = 128 pixels overlap)
+- Creates more training examples and reduces edge effects
+- Example: Patch 1 covers [0:256], Patch 2 covers [128:384] (overlaps by 128 pixels)
+
+**Stride (Inference: 256 pixels):**
+- No overlap between patches (faster inference, fewer patches to process)
+- Edge blending used when reconstructing full image to avoid seams
+
+**Cloud Filtering:**
+- Discard patches with >50% cloud cover (use Sentinel-2 SCL band or cloud masks)
+- Cloud-covered patches are not useful for fire detection
+
+**Note:** All datasets will be resized/cropped to 256×256 patches for consistency. If datasets have different native patch sizes, document the resizing strategy.
+
+#### 2.3.4 Spectral Indices (Optional Additional Channels)
+
+| Index | Formula | Purpose |
+|-------|---------|---------|
+| NBR (Normalized Burn Ratio) | (B8 - B12) / (B8 + B12) | Burn scar detection |
+| NDVI | (B8 - B4) / (B8 + B4) | Vegetation health |
+| BAI (Burned Area Index) | 1 / ((0.1 - B4)² + (0.06 - B8)²) | Active fire enhancement |
+
+### 2.4 Data Augmentation
+
+| Augmentation | Parameters | Purpose |
+|--------------|------------|---------|
+| Random rotation | 0°, 90°, 180°, 270° | Rotational invariance |
+| Horizontal flip | 50% probability | Spatial invariance |
+| Vertical flip | 50% probability | Spatial invariance |
+| **Brightness adjustment** | ±10% | Atmospheric variation |
+| **Contrast adjustment** | ±10% | Sensor variation |
+| **Gaussian noise** | σ = 0.01 | Noise robustness |
+| **Elastic deformation** | α=100, σ=10 (optional) | Geometric variation |
+
+**Note:** Random crop from 256×256 to 224×224 is removed (common for classification, not ideal for segmentation). Keep patch size at 256×256 throughout the pipeline. Consider elastic deformation for additional geometric variation if needed.
+
+### 2.5 Dataset Split Strategy
+
+| Split | Percentage | Notes |
+|-------|------------|-------|
+| Training | 70% | Main training set |
+| Validation | 15% | Hyperparameter tuning, early stopping |
+| Test | 15% | Final evaluation only |
+
+**Critical:** Ensure no geographic overlap between splits. Split by fire event, not by individual patches from the same event.
+
+**Validation Requirements:**
+- Create visualization showing train/val/test regions on a map
+- Document number of fire events in each split
+- Verify no temporal leakage (if temporal patterns matter)
+- Report split statistics: number of patches, fire events, area covered
+- Store split IDs/indices for reproducibility
+
+### 2.6 Class Imbalance Handling
+
+#### 2.6.1 What is Class Imbalance?
+
+**Class imbalance** occurs when one class (fire pixels) is significantly underrepresented compared to another class (non-fire pixels) in the training data. In wildfire detection, this is a critical problem because:
+
+- **Fire pixels typically represent <1-5% of total pixels** in satellite imagery
+- Most of the Earth's surface is not on fire at any given time
+- The model can achieve high accuracy by simply predicting "no fire" for everything
+- This leads to poor recall (missing actual fires) despite high overall accuracy
+
+**Example:** In a 256×256 patch (65,536 pixels), fire might occupy only 100-500 pixels (0.15-0.76%), while the rest are vegetation, water, urban areas, etc.
+
+#### 2.6.2 Goals of Class Imbalance Handling
+
+The primary goals are:
+
+1. **Improve Recall (Sensitivity):** Detect as many actual fires as possible (minimize false negatives)
+   - **Why critical:** Missing a fire has severe consequences (safety, property, environment)
+   - **Target:** Achieve ≥80% recall (detect 80% of actual fires)
+
+2. **Maintain Precision:** Keep false alarms manageable (minimize false positives)
+   - **Why important:** Too many false alarms reduce trust and waste resources
+   - **Target:** Achieve ≥85% precision (85% of detections are real fires)
+
+3. **Balance Training:** Ensure the model sees enough fire examples to learn fire characteristics
+   - **Why needed:** Without sufficient fire examples, the model cannot learn what fires look like
+   - **Target:** Model should see fire pixels in at least 30-50% of training batches
+
+4. **Stable Training:** Prevent the model from collapsing to the trivial "always predict no fire" solution
+   - **Why critical:** Imbalanced data can cause training instability and poor convergence
+   - **Target:** Loss should decrease for both classes, not just the majority class
+
+#### 2.6.3 Strategies for Handling Class Imbalance
+
+##### Strategy 1: Loss Weighting (Recommended Starting Point)
+
+**What it is:** Assign higher weight to the fire class in the loss function, making misclassifying fire pixels more costly than misclassifying non-fire pixels.
+
+**How it works:**
+- Standard BCE loss: `L = -[y*log(p) + (1-y)*log(1-p)]`
+- Weighted BCE loss: `L = -[w_fire*y*log(p) + w_background*(1-y)*log(1-p)]`
+- Typical weights: `w_fire = 5-20`, `w_background = 1` (ratio depends on imbalance severity)
+
+**Advantages:**
+- Simple to implement (single parameter)
+- No changes to data pipeline
+- Works well for moderate imbalance (fire pixels >0.5%)
+
+**Disadvantages:**
+- May not be sufficient for extreme imbalance (<0.1% fire pixels)
+- Requires tuning the weight hyperparameter
+- Can lead to overfitting on fire class if weight too high
+
+**When to use:** Start here for all experiments. Monitor per-class metrics. If recall remains low (<70%), add additional strategies.
+
+##### Strategy 2: Weighted Sampling (Oversampling Fire Patches)
+
+**What it is:** Ensure that patches containing fire pixels appear more frequently in training batches than their natural frequency.
+
+**How it works:**
+- Calculate the probability of sampling each patch based on fire pixel percentage
+- Patches with fire get higher sampling probability
+- Ensures every batch contains fire examples
+
+**Implementation approaches:**
+
+**Option A: Patch-level weighted sampling** - Calculate weights for each patch based on fire pixel ratio, boost fire patches with higher sampling probability.
+
+**Option B: Batch balancing**
+- Ensure each batch contains at least 30-50% patches with fire
+- Filter patches into "fire" and "non-fire" groups
+- Sample proportionally from each group
+
+**Advantages:**
+- Guarantees model sees fire examples regularly
+- Works well with loss weighting (complementary)
+- Can be combined with other strategies
+
+**Disadvantages:**
+- More complex data pipeline
+- May cause overfitting if oversampling too aggressive
+- Requires careful tuning of sampling ratios
+
+**When to use:** Add if loss weighting alone doesn't achieve target recall. Combine with loss weighting for best results.
+
+##### Strategy 3: Focal Loss
+
+**What it is:** A loss function that automatically down-weights easy examples (clear non-fire pixels) and focuses learning on hard examples (ambiguous pixels and fire pixels).
+
+**How it works:**
+- Focal Loss: `FL = -α(1-p)^γ * log(p)` for positive class
+- `α` (alpha): Balancing factor between classes (typically 0.25)
+- `γ` (gamma): Focusing parameter (typically 2.0)
+- Higher `γ` focuses more on hard examples
+
+**Mathematical intuition:**
+- Easy negatives (high confidence non-fire) have `(1-p)^γ` close to 0, so contribute little to loss
+- Hard examples (ambiguous or fire pixels) have `(1-p)^γ` close to 1, so contribute fully to loss
+- Automatically adapts to class imbalance without manual weight tuning
+
+**Implementation:** Use PyTorch to implement Focal Loss with alpha (balancing factor, typically 0.25) and gamma (focusing parameter, typically 2.0) hyperparameters.
+
+**Advantages:**
+- Automatically handles class imbalance
+- Focuses on hard examples (where model is uncertain)
+- No need for manual weight tuning
+- Works well for extreme imbalance
+
+**Disadvantages:**
+- More complex than weighted BCE
+- Requires tuning `α` and `γ` hyperparameters
+- May be slower to converge initially
+
+**When to use:** Alternative to loss weighting, especially for extreme imbalance (<0.1% fire pixels). Can be combined with weighted sampling.
+
+##### Strategy 4: Patch Filtering (Batch Balancing)
+
+**What it is:** Ensure each training batch contains a minimum percentage of patches with fire pixels.
+
+**How it works:**
+- Filter patches into "fire patches" (contain fire pixels) and "background patches" (no fire)
+- When constructing batches, ensure 30-50% of patches are "fire patches"
+- Prevents batches with no fire examples
+
+**Implementation:** Filter patches into fire and background groups, then construct batches ensuring 30-50% are fire patches.
+
+**Advantages:**
+- Guarantees fire examples in every batch
+- Simple to understand and implement
+- Works well with loss weighting
+
+**Disadvantages:**
+- Requires preprocessing to categorize patches
+- May reduce diversity if fire patches are limited
+- Can slow down data loading
+
+**When to use:** Combine with loss weighting for moderate imbalance. Less necessary if using weighted sampling.
+
+##### Strategy 5: Data Augmentation (Fire-Specific)
+
+**What it is:** Apply stronger augmentation to fire patches to create more fire examples.
+
+**How it works:**
+- Fire patches get more aggressive augmentation (rotation, flipping, elastic deformation)
+- Creates synthetic fire examples from existing ones
+- Increases effective number of fire examples
+
+**Advantages:**
+- Increases fire example diversity
+- No changes to loss function needed
+- Complements other strategies
+
+**Disadvantages:**
+- May create unrealistic fire patterns if overdone
+- Requires careful augmentation design
+
+**When to use:** Always use, but apply more aggressively to fire patches.
+
+#### 2.6.4 Recommended Implementation Strategy
+
+**Phase 1: Baseline (Start Here)**
+1. Use **loss weighting** with `pos_weight = 10.0` (adjust based on actual class ratio)
+2. Monitor per-class metrics (precision, recall for fire class)
+3. Track training loss for both classes separately
+
+**Phase 2: If Recall < 70%**
+1. Add **weighted sampling** to ensure 40-50% of batches contain fire patches
+2. Keep loss weighting
+3. Monitor if recall improves
+
+**Phase 3: If Still Insufficient**
+1. Try **Focal Loss** (α=0.25, γ=2.0) instead of weighted BCE
+2. Combine with weighted sampling
+3. Consider increasing fire patch percentage in batches
+
+**Phase 4: Fine-tuning**
+1. Tune loss weights or focal loss parameters based on validation metrics
+2. Adjust sampling ratios to balance precision and recall
+3. Use validation set to find optimal hyperparameters
+
+#### 2.6.5 Metrics to Monitor
+
+**During Training:**
+- **Per-class loss:** Fire class loss vs. background class loss (should both decrease)
+- **Per-class accuracy:** Fire pixel accuracy vs. background pixel accuracy
+- **Class distribution in batches:** Track percentage of fire pixels per batch
+- **Gradient magnitudes:** Ensure gradients flow to both classes
+
+**During Validation:**
+- **Fire class recall:** Most critical metric (target: ≥80%)
+- **Fire class precision:** Important for reducing false alarms (target: ≥85%)
+- **Fire class F1-score:** Balance between precision and recall
+- **Confusion matrix:** Visualize false positives and false negatives
+- **ROC curve and PR curve:** Especially important for imbalanced problems
+
+**Red Flags:**
+- Fire class recall < 50%: Model is not learning fire patterns
+- Fire class precision < 60%: Too many false alarms
+- Fire class loss not decreasing: Model ignoring fire class
+- All batches have <5% fire pixels: Sampling strategy not working
+
+#### 2.6.6 Expected Class Distribution
+
+**In Raw Data:**
+- Fire pixels: 0.1-5% of total pixels (varies by dataset and region)
+- Background pixels: 95-99.9% of total pixels
+
+**In Training Batches (After Handling):**
+- Fire pixels: 10-30% of total pixels (via sampling/augmentation)
+- Background pixels: 70-90% of total pixels
+- At least 40-50% of patches should contain fire pixels
+
+**In Validation/Test Sets:**
+- Keep natural distribution (no oversampling)
+- This reflects real-world conditions
+- Metrics on natural distribution are most meaningful
+
+#### 2.6.7 Implementation Checklist
+
+**How to Do It:** Start by calculating fire pixel percentage across all training patches. If fire pixels <5%, implement loss weighting first (calculate pos_weight as ratio of negative to positive pixels). Monitor training metrics from first epoch - if recall remains low (<70%), add weighted sampling to ensure each batch contains fire examples. After training, evaluate using confusion matrix and ROC/PR curves to assess class imbalance impact. Document all strategies used and their effectiveness.
+
+- [ ] Calculate class distribution in training data (fire vs. non-fire pixel ratio)
+- [ ] Implement loss weighting with appropriate `pos_weight`
+- [ ] Monitor per-class metrics from the first epoch
+- [ ] If recall < 70%, implement weighted sampling
+- [ ] Track class distribution in batches (ensure fire examples present)
+- [ ] Visualize confusion matrix on validation set
+- [ ] Plot ROC and PR curves (more informative than accuracy for imbalanced data)
+- [ ] Document which strategies were used and why
+- [ ] Report class distribution statistics in final report
+
+### 2.7 Data Versioning & Reproducibility
+
+**Why Data Versioning Matters:**
+- **Reproducibility:** Know exactly which data was used for each experiment (essential for capstone report)
+- **Debugging:** If model performance changes, identify if it's due to data or model changes
+- **Academic requirement:** Document data lineage for reproducibility
+
+**Reality Check:**
+- **Processed patches:** 256×256 patches with 7 bands ≈ 1.8 MB per patch
+- **CEMS-Wildfire (500 images):** ~5,000-10,000 patches ≈ **9-18 GB**
+- **Even minimal dataset:** Likely **10-20 GB** of processed data
+- **Git/GitHub:** Cannot store large files (designed for code, not data)
+
+**Conclusion:** Store large datasets externally (cloud storage), document them in Git. Simple and free.
+
+---
+
+#### 2.7.1 Simple Versioning Approach (Recommended)
+
+**For Capstone Projects:**
+
+**Step 1: Process and Store Data**
+1. Process your datasets (preprocessing, patching, normalization)
+2. Store processed data in cloud storage (Google Drive, Dropbox, university storage, or GCP Cloud Storage if using GCP)
+3. Organize in folders: `data/processed/cems-wildfire-v1/`
+
+**Step 2: Document in Git**
+Create a `data/README.md` file in your Git repository with:
+
+```markdown
+# Dataset Versions
+
+## CEMS-Wildfire v1 (2026-01-15)
+- **Location:** [Google Drive link] or [GCP bucket path]
+- **Preprocessing:** Normalization (divide by 10000), 256×256 patches, 20m resolution
+- **Checksum:** `abc123def456...` (MD5 or SHA256)
+- **Train/Val/Test split:** Stored in `data/splits/v1/`
+- **Source:** HuggingFace dataset links-ads/wildfires-cems
+```
+
+**Step 3: Link to Experiments**
+- In W&B, tag each training run with data version: `data-v1`
+- This links model results to the exact data used
+
+**Why This Works:**
+- ✅ **Simple:** One-time documentation, no complex tools
+- ✅ **Free:** Uses free cloud storage
+- ✅ **Reproducible:** Anyone can download the exact same data using the link
+- ✅ **Sufficient:** Meets academic requirements for reproducibility
+
+---
+
+#### 2.7.2 When to Create New Versions
+
+**Create a new version if:**
+- You change preprocessing (different normalization, patch size, etc.)
+- You fix data quality issues (remove bad samples, fix misaligned masks)
+- You add more datasets (combine CEMS-Wildfire + EO4WildFires)
+- You change train/val/test splits
+
+**Naming convention:** `cems-wildfire-v2-2026-02-01` (dataset-name-version-date)
+
+**If you only use one dataset with one preprocessing approach:**
+- One version is fine! Just document it clearly.
+
+---
+
+#### 2.7.3 Data Integrity (Checksums)
+
+**Why checksums?**
+- Verify data wasn't corrupted during download/transfer
+- Ensure everyone uses the exact same files
+
+**How to do it:**
+1. Calculate checksum after processing: `md5sum data/processed/cems-wildfire-v1/*.npy > data-checksums-v1.txt`
+2. Store checksum file in Git: `data/data-checksums-v1.txt`
+3. Verify before using: `md5sum -c data-checksums-v1.txt`
+
+**Optional but recommended:** Helps catch data corruption issues early.
+
+---
+
+#### 2.7.4 Integration with Experiment Tracking
+
+**Link data versions to W&B runs:**
+- When starting training, log data version as a tag: `wandb.run.tags = ["data-v1"]`
+- Or log as config parameter: `wandb.config["data_version"] = "cems-wildfire-v1-2026-01-15"`
+
+**This ensures:**
+- You can always see which data version produced which results
+- Essential for comparing experiments and writing your report
+
+---
+
+#### 2.7.5 Data Versioning Checklist
+
+**Minimum Requirements:**
+- [ ] Store processed data in cloud storage (Google Drive, Dropbox, or GCP Cloud Storage)
+- [ ] Create `data/README.md` documenting:
+  - Dataset name and version
+  - Cloud storage link or path
+  - Preprocessing steps used
+  - Checksum (optional but recommended)
+- [ ] Store train/val/test split indices in Git (small files, can commit directly)
+- [ ] Tag W&B experiments with data version name
+- [ ] Document data source URLs and download dates
+
+**That's it!** Simple, practical, and sufficient for capstone reproducibility.
+
+### 2.8 Data Quality & Exploration
+
+Data quality and exploration is the process of **understanding your dataset before training** to identify problems, patterns, and characteristics that will affect model performance. Think of it as "getting to know your data" - you need to understand what you're working with before you can build a good model.
+
+**Why This Matters:**
+- **Catch errors early:** Find annotation mistakes, misaligned masks, or corrupted files before wasting time training
+- **Understand limitations:** Know what your model can and cannot learn from the data
+- **Guide preprocessing:** Discover what normalization, augmentation, or filtering is needed
+- **Set expectations:** Understand class imbalance, geographic bias, or temporal gaps that affect performance
+- **Documentation:** Create a record of data characteristics for your capstone report
+
+**Deliverable:** Create a comprehensive data exploration notebook (Jupyter) with visualizations, statistics, and findings documented. This notebook should be reproducible and serve as documentation for your dataset.
+
+---
+
+#### 2.8.1 Class Distribution (Fire vs Non-Fire Pixels)
+
+**What to Check:**
+Calculate the percentage of pixels labeled as "fire" vs "non-fire" across all training patches.
+
+**Why This Matters:**
+- **Class imbalance:** Fire pixels are typically <1-5% of total pixels. This extreme imbalance will cause the model to predict "no fire" for everything unless handled (see Section 2.6).
+- **Dataset quality:** If fire pixels are >10%, the dataset might be biased toward fire events (good for training, but may not reflect real-world distribution).
+- **Baseline expectations:** Helps set realistic performance targets (e.g., if only 0.5% of pixels are fire, even a naive "always predict no fire" model gets 99.5% accuracy).
+
+**How to Do It:** Iterate through all training patches, count fire pixels (where mask value = 1) and non-fire pixels (where mask value = 0), calculate percentage. Create a histogram showing fire pixel percentage distribution across patches. Aggregate statistics per dataset to compare class imbalance between different data sources.
+
+**What to Report:**
+- Overall fire pixel percentage across all datasets
+- Fire pixel percentage per dataset (CEMS-Wildfire vs EO4WildFires, etc.)
+- Distribution of fire pixel percentage per patch (histogram showing how many patches have 0% fire, 1-5% fire, etc.)
+- **Action items:** If fire pixels <1%, document that class imbalance handling is critical (see Section 2.6).
+
+---
+
+#### 2.8.2 Geographic Distribution of Fires
+
+**What to Check:**
+Visualize where fires occur geographically - are they clustered in certain regions, or evenly distributed?
+
+**Why This Matters:**
+- **Geographic bias:** If all fires are in one region (e.g., only Mediterranean), the model may not generalize to other regions (e.g., Catalonia).
+- **Split strategy:** Ensures train/val/test splits don't have geographic overlap (see Section 2.5).
+- **Coverage gaps:** Identifies regions with no fire data, which the model cannot learn from.
+
+**How to Do It:** Extract fire locations from metadata (bounding boxes or centroids), create a map using folium or geopandas, and plot fire event locations as markers. One marker per fire event.
+
+**What to Report:**
+- Map showing fire event locations (one marker per fire event)
+- Count of fires per country/region
+- Coverage map showing which areas have fire data vs. no data
+- **Action items:** If fires are clustered, ensure train/val/test splits are geographic (split by region, not randomly).
+
+---
+
+#### 2.8.3 Temporal Distribution (Seasons, Years)
+
+**What to Check:**
+Analyze when fires occur - are they concentrated in certain months (fire season) or years?
+
+**Why This Matters:**
+- **Seasonal patterns:** Wildfires are seasonal (summer in Mediterranean). If all training data is from summer, the model may fail on winter imagery.
+- **Temporal bias:** If all data is from 2017-2019, the model may not generalize to 2024+ (though this is less critical for capstone).
+- **Split strategy:** Ensures train/val/test splits don't have temporal overlap (no data leakage).
+
+**How to Do It:** Extract fire event dates from dataset metadata (acquisition date or fire occurrence date), group by year and month, create histograms showing temporal distribution. Identify fire season by finding months with peak fire counts. Analyze temporal gaps to ensure diversity across years and seasons.
+
+**What to Report:**
+- Histogram of fires by year
+- Histogram of fires by month (identify fire season)
+- Count of fires by season
+- **Action items:** If all fires are from one season, document this limitation. Ensure temporal diversity in train/val/test splits.
+
+---
+
+#### 2.8.4 Cloud Cover Statistics
+
+**What to Check:**
+Calculate how much cloud cover exists in the imagery - are patches heavily clouded, and should they be filtered?
+
+**Why This Matters:**
+- **Data quality:** Heavily clouded imagery is useless for fire detection (clouds block the view of fires).
+- **Filtering strategy:** Need to decide threshold for discarding patches (e.g., discard if >50% cloud cover).
+- **Dataset size:** After filtering, how much usable data remains?
+
+**How to Do It:** Use Sentinel-2 Scene Classification Layer (SCL) or cloud mask bands to calculate cloud percentage per patch. For each patch, count cloud pixels (SCL value = 3, 8, 9, or 10) divided by total pixels. Create histogram of cloud cover percentages across all patches. Count patches exceeding thresholds to determine filtering impact.
+
+**What to Report:**
+- Histogram of cloud cover percentages
+- Mean, median, max cloud cover
+- Count of patches above various thresholds (10%, 25%, 50%)
+- **Action items:** Decide on cloud filtering threshold (recommend >50% cloud = discard). Document how many patches remain after filtering.
+
+---
+
+#### 2.8.5 Band Value Ranges and Outliers
+
+**What to Check:**
+Analyze the pixel values in each Sentinel-2 band - are they in expected ranges? Are there outliers or corrupted values?
+
+**Why This Matters:**
+- **Normalization:** Need to know value ranges to choose correct normalization (see Section 2.3.2).
+- **Data corruption:** Outliers may indicate corrupted files or processing errors.
+- **Sensor issues:** Unusual values might indicate sensor artifacts or calibration problems.
+
+**How to Do It:** For each Sentinel-2 band (B2, B3, B4, B8, B8A, B11, B12), compute statistics (min, max, mean, std) across all patches. Create histograms showing value distributions per band. Identify outliers by checking for values outside expected range (0-10000 for integer format, 0-1 for normalized). Flag any bands with unusual distributions or extreme outliers.
+
+**What to Report:**
+- Min, max, mean, std for each band across all patches
+- Histograms showing value distributions for each band
+- **Expected ranges:** Sentinel-2 L2A reflectance should be 0-1 (normalized) or 0-10000 (integer format). If values are 0-10000, they must be divided by 10,000 to normalize to 0-1 range (see Section 2.3.2 for normalization strategy). If values are outside this range, document the issue.
+- **Action items:** If values are 0-10000, document that division by 10000 is needed for normalization (see Section 2.3.2). Verify normalization is applied consistently across all bands.
+
+---
+
+#### 2.8.6 Missing Data/NaN Handling
+
+**What to Check:**
+Check for missing values (NaN, None, or invalid values) in imagery and masks.
+
+**Why This Matters:**
+- **Training errors:** NaN values will cause training to fail or produce invalid predictions.
+- **Data quality:** Missing data indicates corrupted files or processing errors.
+- **Preprocessing:** Need to handle missing data before training (fill, interpolate, or discard).
+
+**How to Do It:** Load each image and mask patch, check for NaN (Not a Number) or Inf (Infinity) values using numpy functions. Count total NaN/Inf pixels per patch and flag patches exceeding threshold (e.g., >1% NaN). Identify specific files with problematic values. Document location and extent of missing data to determine if files should be discarded or repaired.
+
+**What to Report:**
+- Count of files with NaN or Inf values
+- List of problematic files (if any)
+- **Action items:** If NaN/Inf found, decide on handling strategy:
+  - **Option 1:** Discard problematic files
+  - **Option 2:** Fill NaN with 0 or mean value (not recommended for satellite data)
+  - **Option 3:** Interpolate from neighboring pixels (complex, may not be worth it)
+
+---
+
+#### 2.8.7 Verify Ground Truth Masks Align with Imagery
+
+**What to Check:**
+Ensure that fire masks (ground truth) are correctly aligned with the corresponding satellite imagery - do fire pixels in the mask correspond to actual fire locations in the image?
+
+**Why This Matters:**
+- **Training quality:** Misaligned masks will teach the model wrong patterns (e.g., model learns that "water" = fire if mask is misaligned).
+- **Annotation errors:** Misalignment indicates annotation mistakes or coordinate system issues.
+- **Model performance:** Even small misalignments (1-2 pixels) can hurt performance.
+
+**How to Do It:** Overlay fire mask (ground truth) on corresponding satellite imagery using transparency or color blending. Visually inspect alignment by checking if fire pixels in mask correspond to visible burn scars, smoke plumes, or charred areas in the RGB composite. Check multiple patches across different regions and fire types. Verify pixel-level alignment by comparing mask boundaries with visible fire edges in imagery.
+
+**What to Report:**
+- Visual grid showing 9-16 sample patches with mask overlay
+- Count of patches with obvious misalignment (if any)
+- **Visual inspection:** Manually review overlays - do fire masks align with visible burn scars or smoke in imagery?
+- **Action items:** If misalignment found, investigate coordinate system issues or contact dataset maintainers.
+
+---
+
+#### 2.8.8 Sample Review for Annotation Errors
+
+**What to Check:**
+Manually review a sample of patches to identify annotation errors - are fires correctly labeled? Are there false positives (non-fire labeled as fire) or false negatives (fire not labeled)?
+
+**Why This Matters:**
+- **Training quality:** Annotation errors will teach the model wrong patterns.
+- **Performance limits:** Even a perfect model cannot exceed the quality of ground truth labels.
+- **Dataset trust:** Understanding annotation quality helps interpret model performance.
+
+**How to Do It:** Manually review 20-50 random patches, note annotation quality (Good/Fair/Poor), identify false positives and false negatives.
+
+**What to Report:**
+- Sample of reviewed patches (10-20) with annotations
+- Count of patches with annotation errors
+- Types of errors found (false positives, false negatives, misalignment)
+- **Annotation quality score:** Percentage of patches with "Good" quality
+- **Action items:** If >10% of patches have errors, consider filtering problematic patches or contacting dataset maintainers.
+
+---
+
+#### 2.8.9 Coordinate System Validation
+
+**What to Check:**
+Verify that all imagery and masks use the correct coordinate system (CRS) and that coordinates are consistent.
+
+**Why This Matters:**
+- **Alignment:** Different coordinate systems cause misalignment between imagery and masks.
+- **Geographic accuracy:** Incorrect CRS means geographic locations are wrong (e.g., fire detected at wrong location).
+- **Integration:** Need correct CRS to overlay predictions on maps or combine with other geographic data.
+
+**How to Do It:** Use rasterio to check CRS for all images and masks, verify consistency, and identify any mismatches.
+
+**What to Report:**
+- CRS used for images (should be UTM Zone 31N, EPSG:32631, or WGS84, EPSG:4326)
+- CRS used for masks (should match images)
+- Count of files with missing or incorrect CRS
+- **Action items:** If CRS mismatch found, reproject to consistent CRS (see Section 2.3.1).
+
+---
+
+#### 2.8.10 Check for Duplicate Patches
+
+**What to Check:**
+Identify duplicate patches (same image or mask appearing multiple times) that could cause data leakage between train/val/test splits.
+
+**Why This Matters:**
+- **Data leakage:** If the same patch appears in both train and test sets, test metrics are inflated (model "sees" test data during training).
+- **Dataset size:** Duplicates inflate dataset size without adding information.
+- **Split integrity:** Ensures train/val/test splits are truly independent.
+
+**How to Do It:** Compute SHA256 hashes for all images and masks, identify exact duplicates. Optionally check pixel-wise similarity for near-duplicates (>95% similarity).
+
+**What to Report:**
+- Count of exact duplicate files (same hash)
+- Count of near-duplicate files (>95% similarity)
+- List of duplicate pairs (if any)
+- **Action items:** If duplicates found, remove them before creating train/val/test splits to prevent data leakage.
+
+---
+
+#### 2.8.11 Data Exploration Notebook Template
+
+**Structure for Your Jupyter Notebook:**
+
+**Deliverable Checklist:**
+- [ ] Jupyter notebook with all 10 exploration sections
+- [ ] Visualizations for each section (plots, maps, histograms)
+- [ ] Summary statistics and findings
+- [ ] List of data quality issues and recommended fixes
+- [ ] Documentation of dataset characteristics (class distribution, geographic coverage, temporal range)
+- [ ] Export notebook as HTML/PDF for capstone report
+
+---
+
+## 3. Model Development
+
+### 3.1 Architecture Selection
+
+Architecture selection is choosing the **neural network structure** for semantic segmentation. For this project, we need an architecture that preserves spatial information, handles multi-spectral input (7 bands), and outputs binary masks at the same resolution.
+
+---
+
+#### 3.1.1 Recommended Architecture: U-Net with Pretrained Encoder
+
+**Why U-Net is Recommended:**
+
+U-Net is the **industry standard** for semantic segmentation in remote sensing. Key advantages:
+
+1. **Skip Connections:** Preserve fine-grained spatial details critical for detecting small fires and precise boundaries
+2. **Encoder-Decoder Structure:** Encoder learns high-level fire patterns, decoder reconstructs full-resolution masks
+3. **Proven Performance:** Widely used in remote sensing competitions with excellent results on similar tasks
+4. **Efficiency:** Lightweight, fast inference, good accuracy/speed balance
+5. **Flexibility:** Easy to modify, works with pretrained encoders, handles multi-spectral inputs
+
+**U-Net Architecture:** Encoder downsamples from 256×256 to 16×16, extracting features. Decoder upsamples back to 256×256, with skip connections preserving spatial details from encoder layers.
+
+**Why Pretrained Encoder?** Transfer learning from ImageNet provides general visual features (edges, textures, patterns), leading to faster convergence, 5-10% better accuracy, and less data needed.
+
+**Encoder Options:**
+
+| Encoder | Parameters | Speed | Accuracy | When to Use |
+|---------|-----------|-------|----------|-------------|
+| **ResNet-34** | ~21M | Medium | High | **Recommended default** - balanced performance |
+| EfficientNet-B0 | ~5M | Fast | Good | If speed is critical or GPU memory limited |
+| ResNet-50 | ~25M | Slower | Very High | If accuracy is more important than speed |
+| EfficientNet-B3 | ~12M | Medium | High | Alternative to ResNet-34, more efficient |
+
+**Encoder Choice:** ResNet-34 (recommended) offers proven performance and good balance. EfficientNet-B0 is a good alternative for limited GPU memory or faster inference. Both use ImageNet pretrained weights.
+
+**Decoder:** Standard U-Net decoder with upsampling, skip connections, and 2× Conv3x3 + ReLU + BatchNorm per level. Output: single 1×1 convolution with sigmoid activation.
+
+**Architecture Documentation Requirements:**
+- Document why U-Net over alternatives (DeepLabV3+, FCN, SegNet) - see Section 3.1.2
+- Justify encoder choice (ResNet-34 vs EfficientNet-B0) - based on GPU memory, speed requirements
+- Explain band selection (7 bands vs more/fewer) - see Section 3.1.3
+- Create visual architecture diagram (use tools like `torchsummary` or `visualkeras`)
+- If time permits: ablation studies (different encoders, skip connections, band combinations)
+
+---
+
+#### 3.1.2 Alternative Architectures Considered
+
+**Recommended Options:**
+
+**U-Net + ResNet-34 (Primary Choice):**
+- ~21M parameters, balanced performance (IoU: 0.70-0.75)
+- Most widely used, well-documented, excellent pretrained weights
+- Requires 8GB+ VRAM, good for capstone
+
+**U-Net + EfficientNet-B0 (Alternative):**
+- ~5M parameters (4x smaller), faster inference (IoU: 0.68-0.73)
+- Works on 4GB+ VRAM, good if GPU memory limited
+- Slightly lower accuracy but more efficient
+
+**Other Alternatives (Not Recommended):**
+- **DeepLabV3+:** Too complex (40-60M params, 16GB+ VRAM), overkill for capstone
+- **FCN:** Outdated, superseded by U-Net
+- **SegNet:** Less accurate than U-Net, outdated VGG encoder
+- **U-Net + MobileNetV3:** Only for edge deployment, lower accuracy (IoU: 0.65-0.70)
+
+**Summary:** Use U-Net + ResNet-34 unless GPU memory is limited (then use EfficientNet-B0).
+
+---
+
+#### 3.1.3 Input/Output Specification
+
+**Input Specification:**
+
+| Attribute | Value | Notes |
+|-----------|-------|-------|
+| **Input shape** | (Batch, 7, 256, 256) | 7 spectral bands, 256×256 pixels |
+| **Data type** | float32 | Normalized reflectance [0.0, 1.0] |
+| **Coordinate system** | UTM Zone 31N or WGS84 | Geographic reference |
+| **Spatial resolution** | 10-20m per pixel | Sentinel-2 native resolution |
+
+**Band Selection (7 bands):**
+- **B2, B3, B4 (RGB):** Visualization, spatial patterns
+- **B8, B8A (NIR):** Vegetation detection, NDVI calculation
+- **B11, B12 (SWIR):** **Most critical** - fires emit strongly in SWIR, burned areas have low SWIR reflectance
+
+**Why 7 bands?** Minimum necessary for fire detection (RGB + NIR + SWIR). Other bands (B1, B5-B7, B9-B10) are low resolution or redundant.
+
+**Output Specification:**
+
+| Attribute | Value | Notes |
+|-----------|-------|-------|
+| **Output shape** | (Batch, 1, 256, 256) | Binary mask, same resolution as input |
+| **Data type** | float32 | Probabilities [0.0, 1.0] |
+| **Activation** | Sigmoid | Converts logits to probabilities |
+| **Threshold** | 0.5 (default) | Tunable (0.3-0.4 for higher recall, 0.6-0.7 for higher precision) |
+
+**Input/Output Validation Checklist:**
+
+**How to Do It:** Create validation functions that check input tensor shapes and value ranges before model forward pass. Verify input has correct dimensions (batch, 7 channels, 256×256 spatial) and all values are normalized [0.0, 1.0]. After model inference, verify output shape (batch, 1 channel, 256×256) and probability range [0.0, 1.0]. Test spatial alignment by comparing input and output coordinates. Run threshold optimization on validation set using ROC/PR curves to find optimal threshold. Document all validation checks and band selection rationale.
+
+- [ ] Verify input shape is `(batch_size, 7, 256, 256)`
+- [ ] Verify input values are in range `[0.0, 1.0]` (normalized)
+- [ ] Verify all 7 bands are present and in correct order (B2, B3, B4, B8, B8A, B11, B12)
+- [ ] Verify output shape is `(batch_size, 1, 256, 256)`
+- [ ] Verify output values are in range `[0.0, 1.0]` (probabilities)
+- [ ] Verify output spatial alignment matches input (pixel-to-pixel correspondence)
+- [ ] Test threshold selection on validation set (find optimal threshold)
+- [ ] Document band selection rationale (why these 7 bands)
+
+### 3.2 Training Configuration
+
+Training configuration determines **how the model learns** from data. This includes the loss function (what the model tries to minimize), optimizer (how it updates weights), learning rate schedule (how fast it learns over time), and other hyperparameters that control the training process.
+
+**Key Principles:**
+- **Loss function:** Defines what "good" means - what should the model optimize for?
+- **Optimizer:** Determines how to update model weights based on gradients
+- **Learning rate:** Controls step size - too large (unstable), too small (slow convergence)
+- **Hyperparameters:** Balance between training speed, stability, and final performance
+
+---
+
+#### 3.2.1 Loss Function
+
+**Recommended: Combined BCE + Dice Loss**
+
+The loss function measures how wrong the model's predictions are. For segmentation with class imbalance, use **combined BCE + Dice Loss (0.5:0.5 weight)** - this is the industry standard.
+
+**Why Both?**
+- **BCE Loss:** Pixel-wise accuracy, ensures each pixel classified correctly, provides stable gradients
+- **Dice Loss:** Region overlap, handles class imbalance naturally, directly optimizes IoU
+- **Combined:** Best of both - pixel accuracy + region overlap + handles imbalance
+
+**Alternative Loss Functions:**
+- **Focal Loss:** For extreme imbalance (<0.1% fire pixels), automatically focuses on hard examples
+- **Tversky Loss:** To tune precision/recall trade-off explicitly (higher β = focus on recall)
+- **Weighted BCE:** Simple alternative, add `pos_weight` to BCE component for class imbalance
+
+**How to Do It:** Start with combined BCE + Dice Loss (0.5:0.5 weight) as default. Monitor both loss components separately during training to understand their contributions. If class imbalance is severe (fire pixels <1%), add pos_weight to BCE component or switch to Focal Loss. If recall is too low, try Tversky Loss with higher β parameter to focus on recall. If precision is too low, use Tversky Loss with higher α to focus on precision. Document final loss function, weights, and rationale in experiment tracking.
+
+**Loss Function Checklist:**
+- [ ] Implement combined BCE + Dice Loss (default)
+- [ ] Monitor both loss components separately
+- [ ] If class imbalance severe, add `pos_weight` to BCE or use Focal Loss
+- [ ] If recall too low, try Tversky Loss with higher β (focus on recall)
+- [ ] If precision too low, try Tversky Loss with higher α (focus on precision)
+- [ ] Document final loss function and weights in experiment tracking
+
+---
+
+#### 3.2.2 Optimizer Configuration
+
+The optimizer determines **how to update model weights** based on the loss gradient. It decides the step size (learning rate) and direction for each weight update.
+
+**Why AdamW is Recommended:**
+
+AdamW (Adam with Weight Decay) is the **modern standard** for deep learning optimization. It's an improvement over Adam that properly handles weight decay (regularization).
+
+##### AdamW vs. Other Optimizers
+
+| Optimizer | Pros | Cons | When to Use |
+|-----------|------|------|-------------|
+| **AdamW** | ✅ Adaptive learning rate<br>✅ Handles sparse gradients<br>✅ Proper weight decay<br>✅ Works well out-of-the-box | ⚠️ More memory than SGD<br>⚠️ Can overfit if not regularized | **⭐ Recommended default** |
+| Adam | ✅ Adaptive learning rate<br>✅ Works well | ⚠️ Incorrect weight decay implementation<br>⚠️ May overfit | Use AdamW instead |
+| SGD | ✅ Simple, well-understood<br>✅ Less memory<br>✅ Better generalization (sometimes) | ⚠️ Requires careful LR tuning<br>⚠️ Slower convergence<br>⚠️ Needs momentum | Use if AdamW fails |
+| RMSprop | ✅ Adaptive learning rate | ⚠️ Less popular, fewer examples | Rarely used |
+
+**AdamW Parameters Explained:**
+
+| Parameter | Value | What It Does | Why This Value |
+|-----------|-------|--------------|----------------|
+| **Initial Learning Rate** | `1e-4` (0.0001) | Starting step size for weight updates | **Conservative start** - prevents overshooting early in training. Can increase to 3e-4 if training is stable. |
+| **Weight Decay** | `1e-4` (0.0001) | L2 regularization strength | **Light regularization** - prevents overfitting without hurting performance. Increase to 1e-3 if overfitting. |
+| **Betas** | `(0.9, 0.999)` | Momentum parameters | **Standard values** - β₁=0.9 (short-term momentum), β₂=0.999 (long-term momentum). Rarely need to change. |
+| **Epsilon** | `1e-8` (default) | Numerical stability | **Default is fine** - prevents division by zero. Don't change unless numerical issues occur. |
+
+**Why These Specific Values?**
+
+**Initial Learning Rate: 1e-4 (0.0001)**
+
+- **Conservative start:** Prevents model from overshooting optimal weights early in training
+- **Safe for pretrained models:** When using pretrained encoders (ResNet-34), smaller LR prevents destroying pretrained features
+- **Can be increased:** If training is stable and loss decreases smoothly, can try 3e-4 or 5e-4
+- **Too high:** If LR > 1e-3, training may be unstable (loss oscillates or increases)
+- **Too low:** If LR < 1e-5, training will be very slow (may take 2-3x longer)
+
+**Weight Decay: 1e-4 (0.0001)**
+
+- **Light regularization:** Prevents overfitting without significantly hurting performance
+- **Standard for segmentation:** Common value in segmentation literature
+- **Too high:** If > 1e-3, model may underfit (validation loss doesn't decrease)
+- **Too low:** If < 1e-5, may overfit (large gap between train and validation loss)
+
+**Betas: (0.9, 0.999)**
+
+- **β₁ = 0.9:** Controls short-term momentum (how much recent gradients influence updates)
+- **β₂ = 0.999:** Controls long-term momentum (how much historical gradients influence updates)
+- **Standard values:** These are the default and work well for most tasks
+- **Rarely changed:** Only adjust if you have specific convergence issues
+
+**Implementation:** Use PyTorch to implement AdamW optimizer with specified parameters. Monitor training stability (loss should decrease smoothly) and adjust learning rate and weight decay if necessary. Document optimizer configuration and rationale in experiment tracking.
+
+**Optimizer Tuning Guidelines:**
+
+| Issue | Solution |
+|-------|----------|
+| **Training loss oscillates** | Reduce learning rate (try 5e-5) |
+| **Training loss decreases very slowly** | Increase learning rate (try 3e-4) |
+| **Large gap between train/val loss (overfitting)** | Increase weight decay (try 1e-3) |
+| **Both train and val loss plateau (underfitting)** | Decrease weight decay (try 1e-5) or increase model capacity |
+| **Training is unstable (loss NaN)** | Reduce learning rate significantly (try 1e-5) |
+
+**Optimizer Checklist:**
+
+- [ ] Use AdamW as default optimizer
+- [ ] Start with LR=1e-4, weight_decay=1e-4
+- [ ] Consider different LRs for encoder (1e-5) and decoder (1e-4) if using pretrained encoder
+- [ ] Monitor training stability (loss should decrease smoothly)
+- [ ] Adjust LR if training is too slow or unstable
+- [ ] Adjust weight_decay if overfitting or underfitting
+
+---
+
+#### 3.2.3 Learning Rate Schedule
+
+**Recommended: ReduceLROnPlateau**
+
+A learning rate schedule adjusts the learning rate during training. **ReduceLROnPlateau** is the recommended default - it reduces LR when validation metric stops improving (adaptive, only when needed).
+
+**Parameters:** Monitor validation IoU (or loss), patience=5 epochs, factor=0.5 (reduce by 50%), min_lr=1e-6.
+
+**Alternatives:**
+- **OneCycleLR:** For faster convergence (ramp up then down), requires fixed epochs
+- **Cosine Annealing:** For longer training (100+ epochs), smooth decay
+
+**Learning Rate Schedule Checklist:**
+
+- [ ] Start with ReduceLROnPlateau (default)
+- [ ] Monitor validation IoU (or loss) for scheduler
+- [ ] Set patience=5 epochs (wait 5 epochs before reducing LR)
+- [ ] Set factor=0.5 (reduce LR by 50% each time)
+- [ ] If training is slow, try OneCycleLR for faster convergence
+- [ ] Log learning rate in experiment tracking (W&B)
+
+---
+
+#### 3.2.4 Training Hyperparameters
+
+Training hyperparameters control the **training process itself** - how many examples per batch, how long to train, when to stop, etc. These are separate from model architecture and optimizer settings.
+
+##### Batch Size
+
+**What it is:**
+- Number of samples processed together in one forward/backward pass
+- Affects memory usage, training speed, and gradient stability
+
+**Recommended Values:**
+
+| GPU Memory | Batch Size | Rationale |
+|------------|------------|-----------|
+| **4GB VRAM** | 4-8 | Limited memory, must use small batches |
+| **8GB VRAM** | 8-12 | **Recommended for most GPUs** - good balance |
+| **16GB+ VRAM** | 16-32 | Can use larger batches for faster training |
+
+**Why These Values?**
+
+- **Memory constraint:** Larger batches = more GPU memory needed
+- **Gradient stability:** Larger batches = more stable gradients (but may generalize worse)
+- **Training speed:** Larger batches = fewer iterations per epoch = faster training
+- **Generalization:** Smaller batches sometimes generalize better (but slower)
+
+**How to Choose:**
+
+1. **Start with batch_size=8** (works on most GPUs)
+2. **Increase if:**
+   - GPU memory allows (monitor with `nvidia-smi`)
+   - Training is too slow
+   - Gradients are noisy (loss oscillates)
+3. **Decrease if:**
+   - Out of memory errors occur
+   - Model overfits (large train/val gap)
+
+**Implementation:**
+Use PyTorch to implement batch size selection. Monitor training speed and memory usage during training. If batch size is too large, use mixed precision training (FP16) to reduce memory usage. Document batch size selection and rationale in experiment tracking.
+
+**Batch Size Effects:**
+
+| Batch Size | Memory | Speed | Gradient Stability | Generalization |
+|------------|--------|-------|-------------------|----------------|
+| **Small (4-8)** | Low | Slower | Less stable | Often better |
+| **Medium (8-16)** | Medium | Medium | Stable | Good |
+| **Large (16-32)** | High | Faster | Very stable | May be worse |
+
+##### Number of Epochs
+
+**What it is:**
+- Number of complete passes through the training dataset
+- Determines how long to train
+
+**Recommended Values:**
+
+| Scenario | Epochs | Rationale |
+|----------|--------|-----------|
+| **With early stopping** | 50-100 | Early stopping will stop when validation stops improving |
+| **Without early stopping** | 50-80 | Enough to converge, but not too long |
+| **Limited time** | 30-50 | Minimum for reasonable performance |
+
+**Why These Values?**
+
+- **Early stopping:** With early stopping (patience=10), training typically stops after 30-60 epochs
+- **Convergence:** Most models converge (reach best performance) within 50-80 epochs
+- **Diminishing returns:** Training beyond 100 epochs rarely improves performance significantly
+- **Time constraint:** For capstone, 50-100 epochs is reasonable (with early stopping, may stop earlier)
+
+**How to Monitor:**
+
+##### Early Stopping
+
+**What it is:**
+- Stop training when validation metric stops improving
+- Prevents overfitting and saves training time
+
+**Recommended Configuration:**
+
+| Parameter | Value | Rationale |
+|-----------|-------|------------|
+| **Metric** | Validation IoU | **Better than loss** - directly measures what we care about |
+| **Patience** | 10 epochs | Wait 10 epochs without improvement before stopping |
+| **Min Delta** | 0.001 | Minimum improvement to count as "improvement" (optional) |
+
+**Why Validation IoU (Not Loss)?**
+
+- **Direct metric:** IoU is the target metric (see Section 1.4), loss is just a proxy
+- **More reliable:** Loss can decrease while IoU plateaus (especially with combined losses)
+- **Better stopping:** Stops when actual performance stops improving
+
+**Why Patience=10?**
+
+- **Not too short:** Allows for temporary plateaus (validation can be noisy)
+- **Not too long:** Stops before wasting time on overfitting
+- **Standard value:** Common practice in deep learning
+
+**Implementation:**
+Use PyTorch to implement mixed precision training. Check if GPU supports it (most modern GPUs do) and use `autocast()` for forward pass and `GradScaler()` for backward pass. Document mixed precision training and rationale in experiment tracking.
+
+##### Mixed Precision Training (FP16)
+
+**What it is:**
+- Use 16-bit floating point instead of 32-bit for faster training
+- Reduces memory usage and speeds up training (especially on modern GPUs)
+
+**Why Use It?**
+
+- **Faster training:** 1.5-2x speedup on modern GPUs (V100, A100, RTX 30xx+)
+- **Less memory:** Allows larger batch sizes or larger models
+- **Minimal accuracy loss:** Usually <1% difference in final performance
+
+**When to Use:**
+
+- ✅ **Recommended** - Use if your GPU supports it (most modern GPUs do)
+- ✅ Especially useful if GPU memory is limited
+- ⚠️ May not work on very old GPUs (pre-2018)
+
+**Implementation:**
+
+**Mixed Precision Checklist:**
+
+- [ ] Check GPU support (most modern GPUs support FP16)
+- [ ] Use `autocast()` for forward pass
+- [ ] Use `GradScaler()` for backward pass
+- [ ] Monitor for NaN values (if occur, reduce learning rate)
+- [ ] Compare FP16 vs FP32 performance (should be similar)
+
+**Training Hyperparameters Summary Table:**
+
+| Hyperparameter | Recommended Value | Range | Notes |
+|----------------|-------------------|-------|-------|
+| **Batch Size** | 8-16 | 4-32 | Depends on GPU memory |
+| **Epochs** | 50-100 | 30-150 | With early stopping, typically stops earlier |
+| **Early Stopping Patience** | 10 epochs | 5-20 | On validation IoU |
+| **Mixed Precision** | FP16 (enabled) | FP16/FP32 | Use if GPU supports it |
+| **Gradient Clipping** | Max norm = 1.0 | 0.5-2.0 | Stability, prevents gradient explosion |
+
+**Training Configuration Checklist:**
+
+- [ ] Loss function: Combined BCE + Dice Loss (0.5:0.5)
+- [ ] Optimizer: AdamW (lr=1e-4, weight_decay=1e-4)
+- [ ] Learning rate schedule: ReduceLROnPlateau (patience=5, factor=0.5)
+- [ ] Batch size: 8-16 (based on GPU memory)
+- [ ] Epochs: 50-100 (with early stopping)
+- [ ] Early stopping: On validation IoU (patience=10)
+- [ ] Mixed precision: FP16 (if GPU supports it)
+- [ ] Gradient clipping: Max norm = 1.0 (for stability)
+- [ ] Monitor all hyperparameters in experiment tracking (W&B)
+
+#### 3.2.5 PyTorch DataLoader Configuration
+
+**DataLoader Configuration:**
+
+Proper DataLoader configuration can speed up training 2-3x by parallelizing data loading.
+
+| Parameter | Recommended Value | Notes |
+|-----------|-------------------|-------|
+| **num_workers** | 4-8 | Parallel data loading (4 cores: 2-4, 8 cores: 4-6, 16+ cores: 6-8) |
+| **pin_memory** | True | Faster GPU transfer, always use for GPU training |
+| **prefetch_factor** | 2 | Default is good, prefetches batches ahead |
+| **persistent_workers** | True | Keep workers alive between epochs (if num_workers > 0) |
+| **shuffle** | True (train), False (val/test) | Shuffle training data to prevent learning order |
+
+**DataLoader Checklist:**
+
+- [ ] Set num_workers=4-8 (based on CPU cores)
+- [ ] Enable pin_memory=True (for GPU training)
+- [ ] Set prefetch_factor=2 (default is fine)
+- [ ] Enable persistent_workers=True (if num_workers > 0)
+- [ ] Shuffle=True for training, False for validation/test
+- [ ] Monitor GPU utilization (should be >80%)
+- [ ] Adjust num_workers if GPU is waiting for data
+
+---
+
+#### 3.2.6 Model Checkpointing Strategy
+
+**Model Checkpointing Strategy:**
+
+Save model weights and training state to allow recovery, model selection, and analysis.
+
+| Checkpoint Type | Frequency | Purpose |
+|----------------|-----------|---------|
+| **Best model** | Every epoch (if improved) | Save model with best validation IoU |
+| **Periodic** | Every 10 epochs | Backup for analysis/recovery |
+| **Final** | End of training | Final trained model state |
+
+**What to Save:** Model weights, optimizer state (for resuming), epoch number, validation metrics, hyperparameters, git commit.
+
+**Storage:** Each checkpoint ~100-500MB. Keep best + last 3-5 periodic checkpoints. Don't commit to Git (use external storage).
+
+**Checkpointing Checklist:**
+
+- [ ] Save best model whenever validation IoU improves
+- [ ] Save periodic checkpoints every 10 epochs
+- [ ] Save final model at end of training
+- [ ] Include model weights, optimizer state, and metadata
+- [ ] Store checkpoints in organized directory structure
+- [ ] Clean up old checkpoints to save disk space
+- [ ] Document checkpoint loading procedure
+- [ ] Link checkpoints to experiment tracking (W&B run ID)
+
+### 3.3 Model Optimization
+
+**Note:** Baseline model implementations (threshold-based and Random Forest) are available in `optional-basline-models-comparison.md` for optional comparison with the deep learning approach. Baselines are not required for the capstone project but can provide valuable context if time permits.
+
+Model optimization is the process of **finding the best hyperparameters** (settings that control training but aren't learned) to maximize model performance. This includes tuning learning rates, architecture choices, loss function weights, and other training configurations.
+
+**Why Optimize Hyperparameters?**
+
+- **Performance improvement:** Good hyperparameters can improve IoU by 5-10% compared to default values
+- **Efficient training:** Optimal hyperparameters lead to faster convergence and better final performance
+- **Academic rigor:** Demonstrates thorough experimentation and understanding of the model
+- **Capstone requirement:** Shows systematic approach to model development
+
+**Optimization Strategy:**
+
+For a capstone project, we need a **practical approach** that:
+- Doesn't require weeks of computation
+- Uses accessible tools (Optuna is free and user-friendly)
+- Provides meaningful improvements
+- Is well-documented for the report
+
+---
+
+#### 3.3.1 Hyperparameter Search Space
+
+The search space defines **which hyperparameters to tune** and **what values to try**. A good search space balances:
+- **Coverage:** Explores enough options to find good hyperparameters
+- **Efficiency:** Doesn't waste time on obviously bad values
+- **Practicality:** Fits within time/compute constraints
+
+**Hyperparameter Selection Rationale:**
+
+We focus on hyperparameters that have the **biggest impact on performance** and are **practical to tune** within a capstone timeline.
+
+##### Learning Rate
+
+**Search Range:** 1e-5 to 1e-3 (logarithmic scale)
+
+**Why This Range?**
+
+- **Lower bound (1e-5):** Very conservative learning rate - safe but slow. Below this, training becomes impractically slow.
+- **Upper bound (1e-3):** Aggressive learning rate - fast but risky. Above this, training becomes unstable (loss oscillates or increases).
+- **Logarithmic scale:** Learning rate has exponential effect, so we sample logarithmically (1e-5, 3e-5, 1e-4, 3e-4, 1e-3) rather than linearly.
+
+**Why Learning Rate Matters:**
+- **Most important hyperparameter:** Has the biggest impact on training stability and final performance
+- **Sensitive:** Small changes (e.g., 1e-4 vs 3e-4) can significantly affect convergence
+- **Problem-specific:** Optimal LR depends on dataset, model architecture, and optimizer
+
+**Expected Optimal Value:**
+- Typically between 1e-4 and 5e-4 for AdamW optimizer
+- May be lower (1e-5 to 3e-5) for pretrained encoder (to preserve pretrained features)
+- May be higher (3e-4 to 1e-3) for randomly initialized decoder
+
+##### Encoder
+
+**Search Options:** resnet34, resnet50, efficientnet-b0, efficientnet-b1
+
+**Why These Encoders?**
+
+- **ResNet-34:** Recommended default (see Section 3.1.1) - balanced performance
+- **ResNet-50:** Larger, more capacity - may improve accuracy but slower
+- **EfficientNet-B0:** Efficient alternative - faster, less memory
+- **EfficientNet-B1:** Slightly larger than B0 - middle ground between B0 and ResNet-34
+
+**Why Not Include More Encoders?**
+- **Time constraint:** Each encoder requires full training (hours per trial)
+- **Diminishing returns:** More encoders = more trials = longer optimization
+- **Coverage:** These four cover the main options (small/medium/large, efficient/standard)
+
+**Encoder Selection Rationale:**
+- **ResNet-34 vs ResNet-50:** Trade-off between accuracy and speed/memory
+- **ResNet vs EfficientNet:** Trade-off between proven performance (ResNet) and efficiency (EfficientNet)
+- **Expected outcome:** ResNet-34 or EfficientNet-B0 likely optimal (good balance)
+
+**Why Encoder Matters:**
+- **Feature extraction:** Different encoders extract different features
+- **Model capacity:** Larger encoders can learn more complex patterns (but may overfit)
+- **Training speed:** EfficientNet trains faster, ResNet-50 slower
+- **Transfer learning:** All use ImageNet pretrained weights, but quality varies
+
+##### Batch Size
+
+**Search Options:** 8, 16, 32
+
+**Why These Values?**
+
+- **8:** Minimum practical size - works on most GPUs, good for small datasets
+- **16:** Medium size - good balance, works on 8GB+ GPUs
+- **32:** Large size - faster training, requires 16GB+ GPUs
+
+**Why Not Include Smaller (4) or Larger (64)?**
+- **4:** Too small - unstable gradients, slow training
+- **64:** Too large - requires very high-end GPUs, may hurt generalization
+
+**Why Batch Size Matters:**
+- **Gradient stability:** Larger batches = more stable gradients (but may generalize worse)
+- **Training speed:** Larger batches = fewer iterations per epoch = faster training
+- **Memory constraint:** Limited by GPU memory (can't go too large)
+- **Generalization:** Smaller batches sometimes generalize better (stochastic gradient noise helps)
+
+**Expected Optimal Value:**
+- Typically 8 or 16 for this task (good balance)
+- 32 may be faster but may not improve accuracy
+
+##### Loss Weights (BCE:Dice)
+
+**Search Options:** 0.3:0.7, 0.5:0.5, 0.7:0.3
+
+**Why These Ratios?**
+
+- **0.5:0.5 (default):** Balanced contribution from both losses
+- **0.3:0.7:** Emphasize Dice Loss (better for class imbalance, region overlap)
+- **0.7:0.3:** Emphasize BCE Loss (better for pixel-level accuracy)
+
+**Why Not Include More Options?**
+- **Three options sufficient:** Covers main trade-offs (BCE vs Dice emphasis)
+- **More options:** Diminishing returns, adds trials without much benefit
+- **Default (0.5:0.5) is usually good:** Rarely need extreme ratios
+
+**Why Loss Weights Matter:**
+- **Class imbalance:** Higher Dice weight helps with imbalanced data (fire pixels are rare)
+- **Pixel vs region:** Higher BCE weight emphasizes pixel accuracy, higher Dice weight emphasizes region overlap
+- **Task-specific:** Optimal ratio depends on whether pixel accuracy or region overlap is more important
+
+**Expected Optimal Value:**
+- Likely 0.5:0.5 (default) or 0.3:0.7 (if class imbalance is severe)
+- 0.7:0.3 less common (pixel accuracy usually less important than region overlap)
+
+##### Dropout
+
+**Search Options:** 0.0, 0.1, 0.2
+
+Dropout is a regularization technique that randomly sets some neurons to zero during training to prevent overfitting by preventing co-adaptation of neurons.
+
+**Why These Values?**
+
+- **0.0 (no dropout):** Baseline - no regularization from dropout
+- **0.1 (light dropout):** Light regularization - may help if slight overfitting
+- **0.2 (moderate dropout):** Moderate regularization - helps if overfitting is an issue
+
+**Why Not Include Higher (0.3, 0.5)?**
+- **Too aggressive:** High dropout can hurt performance (model becomes too regularized)
+- **Rarely needed:** For segmentation with pretrained encoders, dropout is often not needed
+
+**Why Dropout Matters:**
+- **Overfitting prevention:** Helps if model overfits to training data
+- **May hurt performance:** If model doesn't overfit, dropout can reduce capacity unnecessarily
+- **Architecture-dependent:** Some architectures benefit more from dropout than others
+
+**Expected Optimal Value:**
+- Likely 0.0 or 0.1 (pretrained encoders provide regularization, may not need dropout)
+- 0.2 only if significant overfitting observed
+
+**Hyperparameter Search Strategy:**
+
+**Two-Phase Approach:**
+
+**Phase 1: Coarse Search (20-30 trials)**
+- Explore entire search space broadly
+- Identify promising regions
+- Goal: Find approximate optimal values
+
+**Phase 2: Fine-Tuning (10-20 trials)**
+- Focus search around best results from Phase 1
+- Narrower ranges: ±50% around best values
+- Goal: Refine to exact optimal values
+
+**Why Two Phases?**
+- **Efficiency:** Coarse search finds good region quickly
+- **Refinement:** Fine-tuning improves within good region
+- **Time management:** Better use of limited trials
+
+**Optuna Configuration:**
+
+**Why Optuna?**
+- **Free and accessible:** No cost, easy to set up
+- **User-friendly:** Simple API, good documentation
+- **Efficient:** Uses Tree-structured Parzen Estimator (TPE) for smart search
+- **Academic-friendly:** Good for capstone (not overly complex)
+
+**Trial Configuration:**
+- **Number of trials:** 20-50 total (30-40 recommended)
+- **Pruning:** Enable pruning to stop bad trials early (saves time)
+- **Objective:** Maximize validation IoU (not loss - see Section 3.2.4)
+- **Timeout:** Set per-trial timeout (e.g., 2 hours) to prevent stuck trials
+
+**Why 20-50 Trials?**
+- **Too few (<20):** May not explore search space adequately
+- **Too many (>50):** Diminishing returns, time-consuming for capstone
+- **Sweet spot:** 30-40 trials provides good exploration without excessive time
+
+**Hyperparameter Importance Analysis:**
+
+**What it is:**
+- Optuna automatically analyzes which hyperparameters matter most
+- Helps understand what drives performance
+
+**Why This Matters:**
+- **Understanding:** Learn which hyperparameters are critical vs. less important
+- **Future optimization:** Focus on important hyperparameters in future work
+- **Documentation:** Shows systematic approach to optimization
+
+**Expected Importance Order:**
+1. **Learning rate** (most important) - biggest impact on performance
+2. **Encoder** (very important) - determines model capacity
+3. **Loss weights** (moderately important) - affects class imbalance handling
+4. **Batch size** (less important) - mainly affects training speed
+5. **Dropout** (least important) - often not needed with pretrained encoders
+
+**Documentation Requirements:**
+
+**For Capstone Report:**
+- **Search space:** Document all hyperparameters and ranges explored
+- **Best hyperparameters:** Report optimal values found
+- **Performance improvement:** Compare optimized vs. default hyperparameters
+- **Convergence plots:** Show how validation IoU improved over trials
+- **Hyperparameter importance:** Include Optuna's importance analysis
+- **Two-phase results:** Document Phase 1 (coarse) and Phase 2 (fine-tuning) separately
+- **Time investment:** Report total optimization time (trials × time per trial)
+
+**Optimization Checklist:**
+- [ ] Define search space (learning rate, encoder, batch size, loss weights, dropout)
+- [ ] Set up Optuna with 20-50 trials
+- [ ] Run Phase 1: Coarse search (20-30 trials)
+- [ ] Analyze results, identify promising regions
+- [ ] Run Phase 2: Fine-tuning (10-20 trials) around best results
+- [ ] Document best hyperparameters found
+- [ ] Report performance improvement vs. default hyperparameters
+- [ ] Include hyperparameter importance analysis
+- [ ] Create convergence plots (validation IoU over trials)
+
+---
+
+#### 3.3.2 Model Export Formats
+
+Model export converts the trained PyTorch model into a format suitable for deployment. The exported model can be loaded and used for inference without the full training code.
+
+**Why Export Models?**
+
+- **Deployment:** Need model in format compatible with deployment environment
+- **Inference speed:** Some formats are optimized for faster inference
+- **Portability:** Some formats work across different platforms/languages
+- **Simplicity:** Exported models are self-contained (no training dependencies)
+
+**Export Format Selection Rationale:**
+
+For a capstone project, we need a format that is:
+- **Simple to use:** Easy to export and load
+- **Compatible:** Works with deployment platform (GCP Cloud Run, Streamlit)
+- **Reliable:** Produces same results as training model
+- **Well-documented:** Easy to understand and explain
+
+##### PyTorch (.pt) Format
+
+**What it is:**
+- Native PyTorch format - saves model state dictionary
+- Standard format for PyTorch models
+
+**Why Recommended for Capstone:**
+
+**Advantages:**
+- ✅ **Simplest:** Native PyTorch format, no conversion needed
+- ✅ **Reliable:** Guaranteed to work with PyTorch (same framework as training)
+- ✅ **Complete:** Saves all model weights exactly as trained
+- ✅ **Easy to load:** Simple loading code, well-documented
+- ✅ **Compatible:** Works with GCP Cloud Run, Streamlit (FastAPI optional)
+- ✅ **No conversion errors:** No risk of conversion bugs or precision loss
+
+**Limitations:**
+- ⚠️ **PyTorch-only:** Requires PyTorch to load (not a problem for Python deployment)
+- ⚠️ **Not optimized:** May be slightly slower than optimized formats (negligible for capstone)
+- ⚠️ **Larger file size:** May be larger than optimized formats (not a concern for capstone)
+
+**When to Use:**
+- **⭐ Recommended for capstone** - simplest and most reliable
+- Python-based deployment (GCP Cloud Run, Streamlit - FastAPI optional)
+- When simplicity and reliability are more important than optimization
+
+**Export Process:**
+1. Save model state dictionary after training
+2. Load model architecture (same as training)
+3. Load state dictionary into model
+4. Set model to evaluation mode
+5. Use for inference
+
+**Verification:**
+- Test that exported model produces same predictions as training model
+- Compare predictions on sample inputs (should be identical)
+- Document model size, inference time, memory requirements
+
+##### TorchScript (.pt) Format
+
+**What it is:**
+- Optimized PyTorch format - compiles model to TorchScript
+- Can be used without Python (C++ deployment)
+
+**Why Not Recommended for Capstone:**
+
+**Advantages:**
+- ✅ **Faster inference:** Optimized execution (marginal improvement)
+- ✅ **C++ compatible:** Can be used in C++ applications
+- ✅ **Production-ready:** Used in production PyTorch serving
+
+**Disadvantages:**
+- ⚠️ **More complex:** Requires tracing or scripting (more steps)
+- ⚠️ **Compatibility issues:** Some PyTorch operations not supported
+- ⚠️ **Debugging harder:** Less intuitive if issues occur
+- ⚠️ **Overkill for capstone:** Unnecessary complexity for demo
+
+**When to Use:**
+- Production deployment with PyTorch serving
+- C++ applications
+- When inference speed is critical (not a concern for capstone)
+
+**Why Skip for Capstone:**
+- Adds complexity without significant benefit for a demo
+- PyTorch .pt format is sufficient and simpler
+- Time better spent on other aspects of the project
+
+##### ONNX (.onnx) Format
+
+**What it is:**
+- Cross-platform format - works with multiple frameworks (PyTorch, TensorFlow, etc.)
+- Industry standard for model interoperability
+
+**Why Not Recommended for Capstone:**
+
+**Advantages:**
+- ✅ **Cross-platform:** Works with multiple frameworks
+- ✅ **Optimized:** Can be optimized for different hardware
+- ✅ **Industry standard:** Widely used in production
+
+**Disadvantages:**
+- ⚠️ **Conversion complexity:** Requires conversion from PyTorch (potential issues)
+- ⚠️ **Compatibility:** Not all PyTorch operations convert cleanly
+- ⚠️ **Debugging:** Harder to debug conversion issues
+- ⚠️ **Unnecessary:** Not needed if staying in PyTorch ecosystem
+
+**When to Use:**
+- Cross-platform deployment (different frameworks)
+- Hardware optimization (specific accelerators)
+- Production systems requiring framework flexibility
+
+**Why Skip for Capstone:**
+- Unnecessary complexity for a Python-based demo
+- PyTorch .pt format is sufficient
+- Conversion may introduce bugs or precision issues
+- Time better spent on other project aspects
+
+**Export Format Decision Tree:**
+
+**Model Export Requirements:**
+
+**For Capstone Demo:**
+- [ ] Export model in PyTorch .pt format
+- [ ] Verify exported model produces same results as training model
+- [ ] Document model size (file size in MB)
+- [ ] Document inference time (time per prediction)
+- [ ] Document memory requirements (RAM/VRAM needed for inference)
+- [ ] Test loading and inference in deployment environment
+- [ ] Include export/loading code in repository
+
+**Export Documentation:**
+- **Model file:** Location and name of exported model
+- **Model size:** File size (e.g., "150 MB")
+- **Inference time:** Time per 256×256 patch (e.g., "0.5 seconds on CPU, 0.1 seconds on GPU")
+- **Memory requirements:** RAM needed for loading (e.g., "2 GB RAM, 1 GB VRAM")
+- **Loading procedure:** How to load model for inference
+- **Verification:** Confirmation that exported model matches training model
+
+**Model Export Best Practices:**
+
+1. **Save after best validation:** Export model with best validation IoU (not final epoch)
+2. **Include metadata:** Save hyperparameters, data version, training metrics with model
+3. **Version control:** Don't commit large model files to Git (store in cloud storage, document location)
+4. **Documentation:** Clearly document model version, training date, performance metrics
+5. **Testing:** Thoroughly test exported model before deployment
+6. **Backup:** Keep backup of exported model (don't rely on single copy)
+
+### 3.4 Experiment Tracking & MLOps
+
+Experiment tracking systematically records all training runs, hyperparameters, metrics, and configurations. This enables reproducibility, comparison of experiments, and debugging of training issues.
+
+**Why This Matters for Capstone:**
+
+- **Reproducibility:** Essential for academic work - must be able to reproduce results
+- **Comparison:** Compare different hyperparameters, architectures, and data configurations
+- **Debugging:** Identify what changed when performance degrades
+- **Documentation:** Automatic logging reduces manual documentation burden
+- **Academic rigor:** Demonstrates systematic approach to model development
+
+---
+
+#### 3.4.1 Weights & Biases (W&B) Setup
+
+**Why Weights & Biases?**
+
+**Tool Selection Rationale:**
+
+| Tool | Pros | Cons | Verdict |
+|------|------|------|---------|
+| **Weights & Biases** | ✅ Free for academic use<br>✅ Intuitive web interface<br>✅ Excellent visualization<br>✅ Easy integration<br>✅ Automatic logging | ⚠️ Requires internet connection | **⭐ Recommended** |
+| MLflow | ✅ Open source<br>✅ Can run locally | ⚠️ More complex setup<br>⚠️ Less intuitive UI<br>⚠️ Requires infrastructure | Good alternative if prefer open source |
+| TensorBoard | ✅ Built into PyTorch<br>✅ No account needed | ⚠️ Limited features<br>⚠️ Less user-friendly<br>⚠️ No cloud sync | Use for local debugging only |
+
+**Why W&B is Recommended:**
+
+- **Academic-friendly:** Free tier sufficient for capstone, no credit card required
+- **User-friendly:** Web interface easier than TensorBoard for non-developers
+- **Automatic logging:** Minimal code changes needed, tracks most things automatically
+- **Visualization:** Excellent plots for training curves, hyperparameter sweeps, confusion matrices
+- **Collaboration:** Team members can view experiments without local setup
+- **Reports:** Built-in report generation for capstone documentation
+
+**What to Track and Why:**
+
+**Hyperparameters:**
+- **Learning rate, batch size, encoder, loss weights:** Core training configuration - essential for reproducibility
+- **Optimizer settings:** Weight decay, betas - affect training dynamics
+- **Why track:** Need to know exact configuration that produced best results
+
+**Training Metrics (Per Epoch):**
+- **Loss components:** Total loss, BCE loss, Dice loss - understand training dynamics
+- **Training IoU, Dice, Precision, Recall:** Monitor training performance (though validation is more important)
+- **Why track:** Identify overfitting (train metrics much higher than validation), training stability
+
+**Validation Metrics (Per Epoch):**
+- **Validation IoU, Dice, Precision, Recall:** Primary performance indicators
+- **Why track:** These determine best model selection, early stopping, and final performance
+
+**Data Version:**
+- **Dataset checksum/version:** Which data version was used for training
+- **Preprocessing parameters:** Normalization method, augmentation settings, patch size
+- **Why track:** Critical for reproducibility - same model + same data = same results
+
+**Model Architecture:**
+- **Encoder type, input/output shapes:** Model configuration
+- **Why track:** Compare different architectures, document final model
+
+**Training Time:**
+- **Total time, time per epoch:** Performance benchmarking, resource planning
+- **Why track:** Understand computational requirements, compare training efficiency
+
+**Environment:**
+- **PyTorch version, CUDA version, requirements.txt:** Reproducibility
+- **Why track:** Different versions can produce different results (even with same random seed)
+
+**Random Seeds:**
+- **Training seed, data loading seed:** Reproducibility
+- **Why track:** Must be able to reproduce exact results
+
+**Best Practices:**
+
+**Log Every Run:**
+- Don't skip failed experiments - they provide valuable information about what doesn't work
+- Failed runs help identify bugs, unstable configurations, or data issues
+
+**Use Tags:**
+- Organize experiments: "baseline", "augmentation-test", "hyperparameter-search", "final-model"
+- Makes it easy to filter and compare related experiments
+
+**Save Model Checkpoints:**
+- Use W&B artifact storage for model checkpoints (if within free tier limits)
+- Links models to specific training runs automatically
+
+**Create Reports:**
+- Use W&B reports to summarize experiments for capstone documentation
+- Include training curves, best hyperparameters, performance comparisons
+
+**Link Model Versions to Data Versions:**
+- Document which data version produced which model
+- Critical for understanding model performance changes
+
+**Alternative Tools:**
+
+**MLflow:** Good alternative if you prefer open-source tools or need local-only tracking. More complex setup but offers more control. For capstone, W&B's simplicity is usually preferable.
+
+**TensorBoard:** Use for local debugging and quick visualizations, but not sufficient for comprehensive experiment tracking. No cloud sync, limited collaboration features.
+
+---
+
+#### 3.4.2 Model Versioning
+
+Model versioning assigns unique identifiers to trained models and stores metadata about each version. This enables tracking which model was used when, comparing model performance, and rolling back to previous versions if needed.
+
+**Why Model Versioning Matters:**
+
+- **Reproducibility:** Know exactly which model produced which results
+- **Comparison:** Compare performance across model versions
+- **Deployment:** Track which model is deployed in production/demo
+- **Academic documentation:** Required for capstone report - must document model versions
+
+**Versioning Strategy:**
+
+**Semantic Versioning:**
+- Format: `v1.0.0` (major.minor.patch)
+- **Major version (v1.x.x):** Architecture changes (e.g., different encoder)
+- **Minor version (v.x.1.x):** Significant improvements (e.g., better hyperparameters, new training data)
+- **Patch version (v.x.x.1):** Bug fixes, minor improvements
+
+**Example:**
+- `v1.0.0`: Initial baseline model (ResNet-34, default hyperparameters)
+- `v1.1.0`: Improved model (optimized hyperparameters from Optuna)
+- `v1.2.0`: Model trained with additional data augmentation
+- `v2.0.0`: Model with EfficientNet-B0 encoder (architecture change)
+
+**Model Metadata to Store:**
+
+| Metadata | Purpose | Example |
+|----------|---------|---------|
+| **Version number** | Unique identifier | v1.1.0 |
+| **Training date** | Temporal reference | 2026-02-15 |
+| **Performance metrics** | Model quality | IoU: 0.72, Dice: 0.82 |
+| **Hyperparameters** | Reproducibility | LR: 3e-4, batch: 16, encoder: resnet34 |
+| **Data version** | Reproducibility | CEMS-Wildfire v1.0, checksum: abc123 |
+| **W&B run ID** | Link to experiment tracking | run-abc123xyz |
+| **Git commit** | Code version | commit: def456 |
+| **Training time** | Resource info | 12 hours, 45 epochs |
+
+**Linking to W&B Runs:**
+
+- Each model version should link to specific W&B run
+- Enables automatic retrieval of all training details
+- Provides complete audit trail from code → data → model → metrics
+
+**Model Card Documentation:**
+
+For each model version, create a model card documenting:
+- **Performance:** Metrics on test set and Catalonia validation set
+- **Limitations:** Known failure modes, edge cases, geographic biases
+- **Intended use:** What the model is designed for (and what it's not)
+- **Training data:** Summary of datasets used
+- **Ethical considerations:** Potential biases, misuse scenarios
+
+**Model Versioning Checklist:**
+- [ ] Use semantic versioning (v1.0.0 format)
+- [ ] Store metadata with each model (date, metrics, hyperparameters, data version)
+- [ ] Link model versions to W&B runs
+- [ ] Create model card for final model version
+- [ ] Document version history in repository README
+- [ ] Tag model versions in Git (if storing model metadata in Git)
+
+### 3.5 Evaluation Metrics
+
+Model evaluation measures how well the trained model performs on unseen data. For segmentation tasks, this requires multiple metrics to capture different aspects of performance (overlap, accuracy, false alarms, missed detections).
+
+**Why Comprehensive Evaluation Matters:**
+
+- **Academic rigor:** Multiple metrics provide complete picture of model performance
+- **Real-world relevance:** Different metrics matter for different use cases (precision for alerts, recall for safety)
+- **Model comparison:** Enables fair comparison with baselines and other methods
+- **Failure analysis:** Identifies where model needs improvement
+
+---
+
+#### 3.5.1 Primary Metrics
+
+**Why These Four Metrics?**
+
+These metrics capture the essential aspects of segmentation performance: overlap quality (IoU, Dice), detection accuracy (Precision), and detection completeness (Recall).
+
+**IoU (Intersection over Union) - Primary Metric**
+
+**What it measures:** Overlap between predicted and ground truth fire areas.
+
+**Formula:** `IoU = TP / (TP + FP + FN)`
+
+**Why it matters:**
+- **Primary segmentation metric:** Standard in computer vision literature
+- **Directly measures overlap:** What we care about for fire area detection
+- **Balanced:** Considers both false positives and false negatives
+- **Interpretable:** 0.70 means 70% of combined predicted and actual fire area overlaps correctly
+
+**Why target ≥ 0.70:**
+- **Realistic for capstone:** Achievable with good data and training
+- **Meaningful performance:** 0.70 IoU indicates good segmentation quality
+- **Literature standard:** Common target in remote sensing segmentation tasks
+- **Below 0.60:** Poor quality, model likely has fundamental issues
+- **Above 0.75:** Excellent performance, may be difficult to achieve
+
+**Dice Score (F1-Score for Segmentation)**
+
+**What it measures:** Harmonic mean of precision and recall, emphasizing overlap.
+
+**Formula:** `Dice = 2TP / (2TP + FP + FN)`
+
+**Why it matters:**
+- **More forgiving than IoU:** Less penalized by small differences (better for small fires)
+- **Directly related to IoU:** Dice ≈ 2×IoU / (1 + IoU) for binary segmentation
+- **Common in medical imaging:** Widely used in segmentation literature
+- **Class imbalance handling:** Works well with imbalanced data
+
+**Why target ≥ 0.80:**
+- **Higher than IoU target:** Dice is typically higher than IoU (e.g., IoU 0.70 ≈ Dice 0.82)
+- **Strong performance indicator:** 0.80 Dice indicates good overlap
+- **Achievable:** With proper class imbalance handling, this is realistic
+
+**Precision (Positive Predictive Value)**
+
+**What it measures:** Fraction of predicted fires that are actually real fires.
+
+**Formula:** `Precision = TP / (TP + FP)`
+
+**Why it matters:**
+- **False alarm control:** Critical for alert systems - high precision means fewer false alarms
+- **Trust:** Users trust system more if detections are reliable
+- **Resource efficiency:** Reduces wasted resources investigating false positives
+- **Real-world impact:** False alarms can desensitize users or waste emergency resources
+
+**Why target ≥ 0.85:**
+- **High reliability:** 85% of detections are correct - acceptable for alert systems
+- **Below 0.75:** Too many false alarms, system becomes unreliable
+- **Above 0.90:** Excellent, but may come at cost of lower recall
+
+**Recall (Sensitivity, True Positive Rate)**
+
+**What it measures:** Fraction of real fires that are successfully detected.
+
+**Formula:** `Recall = TP / (TP + FN)`
+
+**Why it matters:**
+- **Safety critical:** Missing fires has severe consequences (safety, property, environment)
+- **Completeness:** Measures how well model finds all fires
+- **Class imbalance challenge:** Most difficult metric to optimize (fire pixels are rare)
+
+**Why target ≥ 0.80:**
+- **Good coverage:** Detecting 80% of fires is strong performance
+- **Below 0.70:** Missing too many fires, model needs improvement
+- **Above 0.85:** Excellent, but may come at cost of lower precision (more false alarms)
+
+**Metric Trade-offs:**
+
+| Scenario | Priority | Rationale |
+|----------|----------|-----------|
+| **Alert system** | Precision > Recall | False alarms waste resources, reduce trust |
+| **Safety monitoring** | Recall > Precision | Missing fires is worse than false alarms |
+| **Area measurement** | IoU > Precision/Recall | Accurate area measurement is primary goal |
+| **Capstone balance** | All metrics important | Demonstrate balanced performance |
+
+---
+
+#### 3.5.2 Secondary Metrics
+
+**Why Secondary Metrics?**
+
+Primary metrics focus on segmentation quality, but secondary metrics provide additional insights into model behavior and practical usability.
+
+**Pixel Accuracy:**
+
+**What it measures:** Overall percentage of correctly classified pixels.
+
+**Why it's secondary:**
+- **Misleading with class imbalance:** Can achieve 99% accuracy by predicting "no fire" for everything
+- **Less informative:** Doesn't capture fire detection quality (fire pixels are <1% of image)
+- **Still useful:** Provides overall context, but not primary metric
+
+**When to report:** Include for completeness, but don't optimize for it.
+
+**False Positive Rate (FPR):**
+
+**What it measures:** Fraction of non-fire pixels incorrectly classified as fire.
+
+**Formula:** `FPR = FP / (FP + TN)`
+
+**Why it matters:**
+- **Alert reliability:** Low FPR means fewer false alarms
+- **Complement to precision:** Precision focuses on detections, FPR focuses on non-fire areas
+- **Real-world impact:** High FPR can overwhelm users with false alerts
+
+**When to use:** Critical for alert systems, less important for area measurement tasks.
+
+**Detection Latency:**
+
+**What it measures:** Time from image input to prediction output.
+
+**Why it matters:**
+- **Real-time applications:** Must be fast enough for near-real-time detection
+- **User experience:** Slow inference frustrates users
+- **Resource planning:** Determines hardware requirements
+
+**Target:** < 5 seconds per tile for capstone demo (not production requirement).
+
+---
+
+#### 3.5.3 Evaluation Protocol
+
+**Why a Structured Protocol?**
+
+A systematic evaluation protocol ensures fair, comprehensive, and reproducible assessment of model performance. This is essential for academic work and model comparison.
+
+**1. Per-Patch Evaluation**
+
+**What it is:** Calculate metrics on individual 256×256 patches.
+
+**Why this matters:**
+- **Standard unit:** Patches are the training unit, so evaluation should match
+- **Statistical validity:** Many patches provide robust statistics
+- **Identifies problematic patches:** Can find specific failure cases
+
+**How to do it:**
+- Evaluate each patch independently
+- Aggregate metrics across all test patches (mean, std, median)
+- Report distribution (not just mean) - some patches may be much harder than others
+
+**2. Per-Event Evaluation**
+
+**What it is:** Aggregate predictions for entire fire events (multiple patches per fire).
+
+**Why this matters:**
+- **Real-world relevance:** Fires span multiple patches, evaluation should reflect this
+- **Handles patch boundaries:** Some fires may be split across patches
+- **More meaningful:** Users care about detecting entire fires, not just patches
+
+**How to do it:**
+- Group patches by fire event (using ground truth fire IDs or geographic proximity)
+- Aggregate predictions within each event
+- Calculate metrics per event, then aggregate across events
+
+**3. Threshold Analysis**
+
+**What it is:** Plot precision-recall curve and ROC curve, find optimal threshold.
+
+**Why this matters:**
+- **Threshold selection:** Default 0.5 may not be optimal for this task
+- **Trade-off visualization:** See precision/recall trade-off across thresholds
+- **Task-specific optimization:** Can optimize for precision (alerts) or recall (safety)
+
+**How to do it:**
+- Vary threshold from 0.1 to 0.9 (or 0.0 to 1.0)
+- Calculate precision and recall at each threshold
+- Plot Precision-Recall curve and ROC curve
+- Find optimal threshold (e.g., maximize F1, or balance precision/recall based on use case)
+
+**4. Geographic Generalization**
+
+**What it is:** Test on held-out regions (e.g., train on other regions, test on Catalonia).
+
+**Why this matters:**
+- **Transfer learning validation:** Tests if model generalizes to new regions
+- **Real-world applicability:** Model must work on Catalonia (target region)
+- **Identifies geographic bias:** May perform well on training regions but poorly on Catalonia
+
+**How to do it:**
+- Train on non-Catalonia data (e.g., other European fires)
+- Test on Catalonia validation set (created from Generalitat data)
+- Compare Catalonia performance vs general test set performance
+- Analyze transfer learning effectiveness
+
+---
+
+#### 3.5.4 Comprehensive Evaluation Requirements
+
+**Why Comprehensive Evaluation?**
+
+A single metric doesn't tell the full story. Comprehensive evaluation provides complete understanding of model strengths, weaknesses, and failure modes.
+
+**Confusion Matrices:**
+
+**What they show:** Breakdown of predictions into True Positives (TP), False Positives (FP), True Negatives (TN), False Negatives (FN).
+
+**Why multiple levels:**
+- **Per-patch:** Understand patch-level errors
+- **Per-event:** Understand event-level errors (more relevant for users)
+- **Aggregate:** Overall performance summary
+
+**What to analyze:**
+- **TP:** Correct fire detections - verify these are actually fires
+- **FP:** False alarms - identify common false positive sources (urban areas, hot surfaces)
+- **FN:** Missed fires - identify why fires were missed (size, smoke, edge cases)
+- **TN:** Correct non-fire - less interesting but confirms model works on background
+
+**Error Analysis:**
+
+**Why it matters:**
+- **Identifies improvement areas:** Know where to focus future work
+- **Documents limitations:** Essential for model card and academic honesty
+- **Real-world preparation:** Understand failure modes before deployment
+
+**Common Failure Modes to Document:**
+
+**False Positives:**
+- **Urban areas:** Hot surfaces (rooftops, roads) can trigger fire detection
+- **Agricultural burns:** Controlled burns may be detected (could be feature or bug)
+- **Hot surfaces:** Industrial areas, solar panels, reflective surfaces
+- **Cloud edges:** Bright cloud edges can mimic fire signatures
+
+**False Negatives:**
+- **Small fires:** Fires smaller than a few pixels may be missed
+- **Smoke-obscured fires:** Heavy smoke can hide fire signatures
+- **Edge cases:** Fires at patch boundaries, partially visible fires
+- **Low-intensity fires:** Smoldering fires with weak SWIR signal
+
+**Visual Examples:**
+- Include sample predictions showing TP, FP, FN cases
+- Helps readers understand model behavior
+- Essential for capstone report visualization
+
+**Geographic Analysis:**
+- Performance breakdown by region/terrain type if possible
+- Identifies geographic biases
+- Helps understand transfer learning effectiveness
+
+**Threshold Optimization:**
+
+**Why optimize threshold:**
+- **Default 0.5 may not be optimal:** Task-specific requirements may favor precision or recall
+- **Use case dependent:** Alert systems need high precision, safety monitoring needs high recall
+- **Performance improvement:** Optimal threshold can improve F1 by 2-5%
+
+**ROC Curve (Receiver Operating Characteristic):**
+- **X-axis:** False Positive Rate (FPR)
+- **Y-axis:** True Positive Rate (TPR = Recall)
+- **What it shows:** Trade-off between detecting fires (recall) and false alarms (FPR)
+- **AUC (Area Under Curve):** Single number summarizing ROC performance (higher is better)
+
+**Precision-Recall Curve:**
+- **X-axis:** Recall
+- **Y-axis:** Precision
+- **What it shows:** Trade-off between detecting fires (recall) and detection reliability (precision)
+- **More informative for imbalanced data:** ROC can be misleading with class imbalance, PR curve is better
+
+**Optimal Threshold Selection:**
+- **Maximize F1:** Balance precision and recall
+- **Maximize precision:** If false alarms are costly (alert systems)
+- **Maximize recall:** If missing fires is worse (safety monitoring)
+- **Document rationale:** Explain why chosen threshold is appropriate for use case
+
+**Catalonia-Specific Evaluation:**
+
+**Why mandatory:**
+- **Target region:** Model must work on Catalonia (project focus)
+- **Transfer learning test:** Tests if model generalizes from training regions to Catalonia
+- **Academic requirement:** Demonstrates real-world applicability
+
+**What to report:**
+- **Separate metrics:** IoU, Dice, Precision, Recall on Catalonia validation set
+- **Comparison:** Catalonia performance vs general test set performance
+- **Analysis:** Why performance differs (if it does) - geographic bias, data distribution differences
+- **Transfer learning effectiveness:** How well model transfers from training regions to Catalonia
+
+**Evaluation Checklist:**
+- [ ] Calculate all primary metrics (IoU, Dice, Precision, Recall) on test set
+- [ ] Calculate secondary metrics (FPR, pixel accuracy, latency)
+- [ ] Create confusion matrices (per-patch, per-event, aggregate)
+- [ ] Perform threshold optimization (ROC and PR curves)
+- [ ] Evaluate on Catalonia validation set separately
+- [ ] Document error analysis (common failure modes, visual examples)
+- [ ] (Optional) Compare with baseline models if implemented (see `optional-basline-models-comparison.md`)
+- [ ] Include all results in evaluation report
+
+---
+
+## 4. Application Features
+
+Application features define what the system can do from a user perspective. For a capstone project, features should demonstrate model capabilities while remaining implementable within time constraints.
+
+**Feature Selection Rationale:**
+
+- **Core features:** Essential for demonstrating model inference and basic functionality
+- **Advanced features:** Show system potential but may be simplified for capstone
+- **Focus on ML:** Prioritize features that showcase model performance over complex UI/UX
+
+---
+
+### 4.1 Core Features
+
+**Why These Core Features?**
+
+Core features are the minimum necessary to demonstrate a working wildfire detection system. They showcase model inference, spatial analysis, and basic usability.
+
+#### 4.1.1 Fire Detection
+
+**What it does:** Identifies fire pixels in satellite imagery using the trained segmentation model.
+
+**Why binary segmentation:**
+- **Model output:** Segmentation model produces pixel-level classifications (fire/no-fire)
+- **Standard approach:** Binary segmentation is standard for fire detection tasks
+- **Interpretable:** Clear output - each pixel is either fire or not fire
+
+**Confidence map:**
+- **What it is:** Probability values (0-1) for each pixel, not just binary classification
+- **Why it matters:** Users can see detection confidence, helps identify uncertain detections
+- **Use cases:** Threshold adjustment, uncertainty visualization, quality assessment
+
+**Threshold adjustment:**
+- **What it is:** User can change detection threshold (default 0.5) to balance precision/recall
+- **Why it matters:** Different use cases need different thresholds (alerts need high precision, safety needs high recall)
+- **Implementation:** Simple parameter in API/UI, no model retraining needed
+
+#### 4.1.2 Fire Area Extraction
+
+**What it does:** Converts pixel-level predictions into geographic polygons for visualization and analysis.
+
+**Polygon extraction:**
+- **Why needed:** Binary masks are raster data (pixels), but users need vector data (polygons) for GIS tools
+- **How it works:** Convert connected fire pixels into polygons using contour detection
+- **Use cases:** Overlay on maps, area calculation, export to GIS software
+
+**Minimum area filter:**
+- **What it is:** Discard detections smaller than threshold (e.g., 0.1 hectares)
+- **Why it matters:** Filters noise and very small detections that may be false positives
+- **Typical threshold:** 0.1-0.5 hectares (depends on use case and spatial resolution)
+- **Rationale:** Very small fires (<0.1 ha) are often false positives or not actionable
+
+**GeoJSON output:**
+- **What it is:** Standard format for geographic data (JSON with coordinates)
+- **Why GeoJSON:** Widely supported by web maps (Leaflet, Mapbox, Google Maps), GIS software (QGIS, ArcGIS), and APIs
+- **Alternative formats:** Shapefile (more complex), KML (Google Earth), but GeoJSON is most universal
+
+**Coordinate system:**
+- **WGS84 (EPSG:4326):** Standard web coordinate system (latitude/longitude) - used for map display
+- **UTM Zone 31N (EPSG:32631):** Projected coordinate system for Catalonia - used for accurate area calculations
+- **Why both:** Web maps use WGS84, but area calculations need projected coordinates (UTM) for accuracy
+- **Conversion:** System converts between coordinate systems as needed
+
+#### 4.1.3 Fire Area Measurement
+
+**What it does:** Calculates quantitative metrics about detected fire areas.
+
+**Why these metrics:**
+- **Total area:** Primary metric - how much area is affected by fire
+- **Fire percentage:** Contextual metric - what fraction of analyzed region is on fire
+- **Perimeter:** Useful for firefighting planning - boundary length indicates containment difficulty
+- **Centroid:** Geographic center - useful for location identification and mapping
+- **Bounding box:** Extent coordinates - defines region of interest, useful for zooming/display
+
+**Total area calculation:**
+- **Method:** Sum of all fire pixels × pixel area (accounts for spatial resolution)
+- **Units:** Hectares (standard for fire area reporting)
+- **Accuracy:** Depends on spatial resolution (10-20m for Sentinel-2) and coordinate system (UTM for accuracy)
+
+**Why hectares:**
+- **Standard unit:** Fire area is typically reported in hectares (or acres in US)
+- **Meaningful scale:** Hectares are appropriate for fire sizes (small fires: <1 ha, large fires: >100 ha)
+- **User familiarity:** Emergency services and forestry departments use hectares
+
+---
+
+### 4.2 Advanced Features
+
+**Why Advanced Features?**
+
+Advanced features demonstrate system potential beyond basic detection. For capstone, these may be simplified or partially implemented to show capability without excessive complexity.
+
+#### 4.2.1 Fire Spread Detection (Multi-temporal Analysis)
+
+**What it does:** Compares fire detections across multiple time periods to identify spreading fires.
+
+**Why this matters:**
+- **Real-world relevance:** Fire spread is critical information for emergency response
+- **Demonstrates capability:** Shows system can do more than single-image detection
+- **Academic value:** Multi-temporal analysis is advanced remote sensing technique
+
+**Temporal comparison:**
+- **What it is:** Compare detections from two dates (T1 and T2) to identify changes
+- **Why two dates:** Simplest multi-temporal analysis - more dates add complexity
+- **Time interval:** Typically 1-7 days (depends on satellite revisit frequency and fire spread rate)
+
+**Spread area:**
+- **What it is:** New fire areas present in T2 but not in T1
+- **Why it matters:** Identifies actively spreading fires (critical for emergency response)
+- **Calculation:** Set difference (T2 fire areas - T1 fire areas)
+
+**Contained area:**
+- **What it is:** Fire areas present in T1 but not in T2 (fire extinguished or contained)
+- **Why it matters:** Shows fire suppression effectiveness, identifies contained fires
+- **Calculation:** Set difference (T1 fire areas - T2 fire areas)
+
+**Spread direction and rate:**
+- **What it is:** Vector indicating predominant spread direction, hectares per day spread rate
+- **Why it matters:** Helps predict future spread, plan firefighting resources
+- **Complexity:** Requires centroid calculation and temporal interpolation - may be simplified for capstone
+
+**Spread alert:**
+- **What it is:** Boolean flag indicating if fire is actively spreading
+- **Why it matters:** Prioritizes alerts - spreading fires need immediate attention
+- **Criteria:** Spread area > threshold (e.g., >1 hectare) indicates active spread
+
+**Capstone simplification:**
+- **Focus on spread area:** Most important metric, simplest to implement
+- **Skip complex features:** Spread direction/rate may be omitted if time-constrained
+- **Demonstrate concept:** Show that multi-temporal analysis is possible, even if simplified
+
+#### 4.2.2 Alert System
+
+**What it does:** Automatically generates alerts when fires are detected, with severity levels based on fire characteristics.
+
+**Why alerts matter:**
+- **Real-world application:** Automated alerts are key use case for fire detection systems
+- **Demonstrates integration:** Shows system can integrate with notification systems
+- **User value:** Alerts provide actionable information to users
+
+**Alert level rationale:**
+
+**LOW (🟡 Yellow):**
+- **Criteria:** < 1 hectare, not spreading
+- **Why:** Small fires may be false positives or controlled burns - monitor but low priority
+- **Action:** Log detection, no immediate alert needed
+
+**MEDIUM (🟠 Orange):**
+- **Criteria:** 1-10 hectares, or small but spreading
+- **Why:** Moderate-sized fires or spreading small fires need attention
+- **Action:** Send alert to monitoring systems, prepare for potential escalation
+
+**HIGH (🔴 Red):**
+- **Criteria:** 10-100 hectares, or medium and spreading
+- **Why:** Large fires or actively spreading fires require immediate response
+- **Action:** Send high-priority alerts, notify emergency services
+
+**CRITICAL (⚫ Black):**
+- **Criteria:** > 100 hectares, or large and rapidly spreading
+- **Why:** Very large fires or rapidly spreading fires are emergencies
+- **Action:** Immediate high-priority alerts, emergency response activation
+
+**Alert content:**
+- **Timestamp (UTC):** When fire was detected - critical for temporal context
+- **Location:** Coordinates and nearest municipality - essential for response planning
+- **Fire area:** Size in hectares - determines alert level and resource allocation
+- **Alert level:** Severity indicator - helps prioritize response
+- **Spread status:** Whether fire is spreading - critical for resource planning
+- **Link to dashboard:** Allows users to view detailed information
+
+**Capstone simplification:**
+- **Basic alert levels:** Implement 2-3 levels (LOW, HIGH) instead of all 4
+- **Simple notifications:** Email or webhook only, skip SMS/push
+- **Focus on detection:** Alert generation is more important than complex notification routing
+
+#### 4.2.3 Notification Channels
+
+**What it does:** Delivers alerts through various communication channels.
+
+**Why multiple channels:**
+- **Reliability:** Multiple channels ensure alerts are received even if one fails
+- **User preference:** Different users prefer different notification methods
+- **Urgency:** Different channels for different alert levels
+
+**Channel selection rationale:**
+
+**Email (SMTP):**
+- **Why:** Universal, reliable, easy to implement
+- **Use case:** Standard alerts, non-urgent notifications
+- **Implementation:** Simple SMTP integration, HTML formatting for readability
+
+**Webhook (POST to URL):**
+- **Why:** Flexible, integrates with Slack, Discord, custom systems
+- **Use case:** Team notifications, integration with existing systems
+- **Implementation:** Simple HTTP POST with JSON payload
+
+**SMS (Twilio or similar):**
+- **Why:** High-priority alerts, reaches users even when not online
+- **Use case:** Critical alerts only (due to cost)
+- **Implementation:** Requires SMS service (Twilio, AWS SNS) - may be skipped for capstone
+
+**Push notification (Web Push API):**
+- **Why:** Real-time notifications for dashboard users
+- **Use case:** Users actively monitoring dashboard
+- **Implementation:** Browser-based push notifications - more complex, may be skipped
+
+**Capstone recommendation:**
+- **Start with email:** Simplest to implement, sufficient for demo
+- **Add webhook if time allows:** Shows integration capability
+- **Skip SMS/push:** More complex, not essential for capstone demo
+
+#### 4.2.4 Historical Analysis
+
+**What it does:** Analyzes past fire detections to identify patterns and trends.
+
+**Why this matters:**
+- **Academic value:** Demonstrates data analysis and visualization capabilities
+- **Real-world relevance:** Historical analysis is important for fire management
+- **System completeness:** Shows system can do more than just detection
+
+**Detection history:**
+- **What it is:** Database of all past detections with timestamps, locations, areas
+- **Why it matters:** Enables temporal analysis, pattern identification
+- **Storage:** Simple database (SQLite for capstone) or CSV files
+
+**Time series:**
+- **What it is:** Fire area over time for a specific region
+- **Why it matters:** Shows fire evolution, identifies trends
+- **Visualization:** Line chart showing area vs time
+
+**Seasonal patterns:**
+- **What it is:** Aggregated statistics by month/season (e.g., summer has more fires)
+- **Why it matters:** Identifies fire season, helps with resource planning
+- **Analysis:** Group detections by month/season, calculate statistics
+
+**Comparison:**
+- **What it is:** Current year vs historical average
+- **Why it matters:** Identifies unusual fire activity, contextualizes current situation
+- **Calculation:** Compare current year statistics to multi-year averages
+
+**Capstone simplification:**
+- **Basic history:** Store detections with timestamps, locations, areas
+- **Simple visualization:** Time series chart, basic statistics
+- **Skip complex analysis:** Seasonal patterns and comparisons may be omitted if time-constrained
+
+---
+
+## 5. User Interface (Simplified for Capstone)
+
+**Note:** API implementation is optional. If you want to implement a separate API layer (FastAPI) for separation of concerns, see `optional_api_design.md`. For this capstone, Streamlit can load the model directly without needing a separate API.
+
+The user interface (UI) is how end users interact with the wildfire detection system. For a capstone project, the UI should be functional and demonstrate model capabilities without excessive complexity.
+
+**UI Design Philosophy:**
+
+- **Simplified for capstone:** Focus on demonstrating model inference, not production UI/UX
+- **Functional over beautiful:** Working demo is more important than polished design
+- **Time-efficient:** Choose technology that minimizes development time
+- **Model-focused:** UI serves to showcase model, not be the main feature
+
+---
+
+### 5.1 Technology Stack - Simplified Options
+
+**Why Simplified Options?**
+
+For capstone, UI technology should minimize learning curve and development time, allowing more focus on model development and evaluation.
+
+#### Option 1: Streamlit (Recommended)
+
+**Why Streamlit is Recommended:**
+
+**Python-based:**
+- **No JavaScript needed:** Team can use Python (same language as model)
+- **Reduced learning curve:** No need to learn JavaScript, HTML, CSS
+- **Consistency:** Same language for model, API, and UI
+
+**Easy PyTorch integration:**
+- **Direct model loading:** Can load PyTorch model directly in Streamlit app
+- **No API needed:** Can call model directly - no separate API layer required
+- **Simple inference:** Model inference code works directly in Streamlit
+
+**Built-in map support:**
+- **Folium/streamlit-folium:** Python libraries for interactive maps
+- **No external services:** Don't need Mapbox/Google Maps API keys
+- **GeoJSON support:** Easy to display fire polygons on maps
+
+**Fastest to implement:**
+- **Rapid prototyping:** Can create working UI in hours, not days
+- **Less code:** Streamlit handles much of the UI complexity
+- **Time savings:** More time for model work, less time on UI
+
+**Limitations:**
+- **Less flexible:** Limited customization compared to custom HTML/JS
+- **Performance:** May be slower for complex interactions
+- **Styling:** Limited control over appearance (acceptable for capstone)
+
+**When to use:** **⭐ Recommended for capstone** - best balance of simplicity and functionality.
+
+#### Option 2: Simple HTML/JavaScript
+
+**Why consider this option:**
+
+**Minimal code:**
+- **Simple structure:** Basic HTML, minimal JavaScript
+- **No frameworks:** Vanilla JavaScript is sufficient for simple demo
+- **Lightweight:** Fast loading, simple deployment
+
+**Leaflet.js for maps:**
+- **Open source:** Free, no API keys needed
+- **Well-documented:** Extensive documentation and examples
+- **GeoJSON support:** Easy to display fire polygons
+
+**Direct model integration:**
+- **Simple integration:** Load model directly in JavaScript/HTML app
+- **No backend complexity:** UI loads model directly, no separate API layer needed
+- **Clear separation:** UI and model are integrated in single application
+
+**Limitations:**
+- **JavaScript required:** Team needs JavaScript knowledge
+- **More code:** More code than Streamlit for same functionality
+- **Manual styling:** Need to write CSS for appearance
+
+**When to use:** If team has JavaScript experience and prefers separation of concerns (UI vs API).
+
+#### Option 3: React/Next.js
+
+**Why not recommended for capstone:**
+
+**More complex:**
+- **Learning curve:** Requires React knowledge, component architecture
+- **More code:** More boilerplate and setup code
+- **Build process:** Requires build tools, deployment configuration
+
+**Time-consuming:**
+- **Development time:** Takes longer to implement than Streamlit
+- **Less time for model:** Time spent on UI is time not spent on model
+- **Overkill:** More features than needed for capstone demo
+
+**When to use:** Only if team has prior React/Next.js experience and wants to demonstrate full-stack skills.
+
+**Recommendation:** Use Streamlit for capstone - focus time on model, not UI complexity.
+
+---
+
+### 5.2 Simplified UI Structure (Streamlit Example)
+
+**Why This Structure?**
+
+The UI structure should enable users to run fire detection and view results with minimal complexity. Each component serves a specific purpose in the detection workflow.
+
+**Main Page Components:**
+
+**Map display:**
+- **What it is:** Interactive map showing region of interest and fire detections
+- **Why it matters:** Visual representation is essential for understanding fire locations
+- **Technology:** Folium or streamlit-folium (Python map libraries)
+- **Features:** Zoom, pan, click to get coordinates, display fire polygons
+
+**Date picker:**
+- **What it is:** User selects date for satellite imagery analysis
+- **Why it matters:** Different dates show different fire situations
+- **Constraints:** Past dates only (satellite imagery is historical)
+- **Default:** Recent date (e.g., 7 days ago) or user-specified
+
+**Bounding box input:**
+- **What it is:** User specifies geographic region to analyze
+- **Why it matters:** Users may want to analyze specific regions (e.g., Catalonia)
+- **Options:**
+  - **Text input:** Enter coordinates (min_lon, min_lat, max_lon, max_lat)
+  - **Draw on map:** Click and drag to draw bounding box (more user-friendly)
+  - **Preset regions:** Dropdown with predefined regions (Catalonia, specific fire areas)
+
+**"Run Detection" button:**
+- **What it does:** Triggers fire detection for selected region and date
+- **Why it matters:** Clear action trigger, user controls when detection runs
+- **Feedback:** Show loading indicator while processing (detection takes 10-30 seconds)
+
+**Results display:**
+- **What it shows:** Fire polygons on map, statistics (total area, fire count)
+- **Why it matters:** Users need to see detection results and understand fire characteristics
+- **Components:**
+  - **Map overlay:** Fire polygons displayed on map
+  - **Statistics panel:** Total area (hectares), number of fires, processing time
+  - **Confidence visualization:** Optional - color-code polygons by confidence
+
+**Export button:**
+- **What it does:** Downloads fire polygons as GeoJSON file
+- **Why it matters:** Users may want to use results in GIS software or other tools
+- **Format:** GeoJSON (standard format, works with QGIS, ArcGIS, web maps)
+
+**Minimal Features Rationale:**
+
+**Basic map with fire overlays:**
+- **Why minimal:** Complex map features (layers, styles, controls) add complexity
+- **Sufficient:** Basic map with fire polygons is enough to demonstrate functionality
+- **Focus:** Map serves to visualize fires, not be a full GIS application
+
+**Simple controls:**
+- **Why simple:** Complex controls (multiple date ranges, advanced filters) add development time
+- **Sufficient:** Date, region, threshold are core controls needed for detection
+- **User-friendly:** Simple controls are easier to understand and use
+
+**Results display:**
+- **Why essential:** Users must see detection results to understand system functionality
+- **Format:** Map visualization + statistics table is clear and informative
+- **Sufficient:** Detailed analysis can be done in exported GeoJSON
+
+**Export functionality:**
+- **Why important:** Enables users to use results in other tools (GIS, analysis)
+- **Simple implementation:** File download is straightforward in Streamlit
+- **Standard format:** GeoJSON is universal format for geographic data
+
+**Skipped Complex Features:**
+
+**Spread analysis UI:**
+- **Why skip:** Requires multi-date selection, temporal comparison logic
+- **Complexity:** Adds significant development time
+- **Alternative:** Can be done in exported data or omitted for capstone
+
+**Alert management:**
+- **Why skip:** Requires user accounts, alert configuration, notification setup
+- **Complexity:** Adds database, authentication, notification infrastructure
+- **Alternative:** Show alert generation capability without full management UI
+
+**Historical analysis:**
+- **Why skip:** Requires database, time series visualization, statistical analysis
+- **Complexity:** Adds significant backend and frontend complexity
+- **Alternative:** Show single detection capability, mention historical analysis as future work
+
+**Complex navigation:**
+- **Why skip:** Single-page application is sufficient for capstone demo
+- **Complexity:** Multi-page navigation adds routing, state management
+- **Alternative:** All features on single page (scroll or tabs if needed)
+
+**Focus:** Working demo that shows model inference, not production UI.
+
+**UI Development Checklist:**
+- [ ] Set up Streamlit project structure
+- [ ] Implement map component with folium/streamlit-folium
+- [ ] Add date picker (past dates only)
+- [ ] Add bounding box input (text or draw on map)
+- [ ] Add "Run Detection" button with loading indicator
+- [ ] Implement results display (map overlay + statistics)
+- [ ] Add export functionality (GeoJSON download)
+- [ ] Test end-to-end workflow (select region → detect → view results → export)
+- [ ] Basic styling and polish (make it presentable, not perfect)
+
+---
+
+## 6. Deployment (Simplified for Capstone)
+
+Deployment makes the wildfire detection system accessible to users via the internet or local network. For a capstone project, deployment should be simple, cost-effective (using university credits), and demonstrate the working system.
+
+**Deployment Philosophy:**
+
+- **Simplified for capstone:** Focus on getting system online, not production infrastructure
+- **University credits:** Use Google Cloud Platform with university-provided free credits
+- **Time-efficient:** Choose deployment method that minimizes setup time
+- **Demonstration-focused:** Goal is to show working system, not enterprise deployment
+
+---
+
+### 6.1 Simplified Deployment Options
+
+**Why Simplified Options?**
+
+For capstone, deployment should be straightforward and require minimal infrastructure knowledge. Complex deployment (Kubernetes, cloud orchestration) is unnecessary.
+
+#### Option 1: Google Cloud Platform (Recommended)
+
+**Why Google Cloud Platform is Recommended:**
+
+**University credits:**
+- **Free credits:** University provides GCP credits for academic projects
+- **Cost-effective:** Credits sufficient for capstone demo (low traffic, limited duration)
+- **Academic-friendly:** GCP has good support for research and educational projects
+
+**Easy deployment:**
+- **Cloud Run:** Serverless container deployment - no server management
+- **Simple setup:** Deploy from Docker container or source code
+- **Automatic scaling:** Handles traffic automatically (scales to zero when not in use)
+
+**Framework support:**
+- **Streamlit:** Deploy Streamlit applications easily (FastAPI optional if separate API needed)
+- **Streamlit:** Deploy Streamlit applications
+- **Any Python app:** Flexible deployment options
+
+**Integrated services:**
+- **Cloud Storage:** Store model files (.pt files) - simple and cost-effective
+- **Cloud Build:** Automatic builds from Git repository
+- **Cloud Logging:** Built-in logging and monitoring
+
+**Limitations:**
+- **Requires GCP account:** Need to set up GCP project (university provides access)
+- **Docker knowledge:** Need basic Docker understanding (Dockerfile required)
+- **Credit management:** Monitor credit usage to avoid unexpected costs
+
+**When to use:** **⭐ Recommended for capstone** - best balance of simplicity, functionality, and cost-effectiveness with university credits.
+
+#### Option 2: Local Docker Container
+
+**Why consider local deployment:**
+
+**No cloud required:**
+- **Offline demo:** Can demo without internet connection
+- **No external dependencies:** Everything runs locally
+- **Full control:** Complete control over environment
+
+**Simple setup:**
+- **Dockerfile:** Single Dockerfile defines entire environment
+- **Reproducible:** Same environment on any machine with Docker
+- **Portable:** Can run on any OS (Windows, Mac, Linux)
+
+**Limitations:**
+- **Not accessible online:** Can't share via URL (unless using port forwarding)
+- **Requires Docker:** Users need Docker installed
+- **Local only:** Not suitable for remote demos or grading
+
+**When to use:** For in-person demos, presentations, or as backup if GCP deployment has issues.
+
+#### Option 3: Google Colab
+
+**Why consider Google Colab:**
+
+**Jupyter environment:**
+- **Familiar interface:** Jupyter notebooks are familiar to students
+- **Free GPU:** Can use free GPU for inference (if available)
+- **Easy sharing:** Share via link, no deployment needed
+
+**Limitations:**
+- **Not a web app:** Not suitable for interactive web interface
+- **Session-based:** Sessions timeout, not persistent
+- **Limited UI:** Can't create full web interface like Streamlit
+
+**When to use:** For quick inference demos or model testing, not full system deployment.
+
+---
+
+### 6.2 Recommended Approach: Google Cloud Platform
+
+**Why Google Cloud Platform?**
+
+Google Cloud Platform provides the best balance of simplicity, functionality, and cost-effectiveness for capstone projects when university credits are available.
+
+**Advantages:**
+- **Serverless deployment:** Cloud Run handles infrastructure automatically
+- **Cost-effective:** University credits cover deployment costs
+- **Professional:** Industry-standard platform, good for presentations
+- **Scalable:** Can handle traffic spikes automatically
+- **Integrated:** Easy integration with other GCP services (Storage, Logging)
+
+**GCP Services Used:**
+
+| Service | Purpose | Why This Service |
+|---------|---------|------------------|
+| **Cloud Run** | Deploy Streamlit app (FastAPI optional) | Serverless, pay-per-use, automatic scaling |
+| **Cloud Storage** | Store model files (.pt) | Simple, cost-effective file storage |
+| **Cloud Build** | Build Docker images from Git | Automated builds, integrates with Git |
+| **Cloud Logging** | Application logs | Built-in, no setup needed |
+
+**Setup Process:**
+
+**1. Set up GCP Project:**
+- **Create project:** Use university GCP account to create new project
+- **Enable APIs:** Enable Cloud Run, Cloud Storage, Cloud Build APIs
+- **Set billing:** Link university billing account (uses credits)
+- **Verify credits:** Confirm available credits are sufficient
+
+**2. Prepare Docker Image:**
+- **Create Dockerfile:** Define container with Python, dependencies, app code
+- **Test locally:** Build and test Docker image locally before deploying
+- **Include model:** Copy model file (.pt) into Docker image or download from Cloud Storage at startup
+
+**3. Deploy to Cloud Run:**
+- **Build image:** Use Cloud Build to build Docker image from Git repository
+- **Deploy service:** Deploy container to Cloud Run
+- **Configure:** Set environment variables, memory, CPU limits
+- **Get URL:** Cloud Run provides HTTPS URL automatically
+
+**4. Store Model in Cloud Storage:**
+- **Create bucket:** Create Cloud Storage bucket for model files
+- **Upload model:** Upload PyTorch model (.pt file) to bucket
+- **Update code:** Modify app to download model from Cloud Storage at startup (if not in image)
+
+**Storage Strategy:**
+
+**Model files:**
+- **Option 1:** Cloud Storage bucket (recommended) - separate from container, easy updates
+- **Option 2:** Include in Docker image - simpler but larger images, requires rebuild to update
+- **Size considerations:** Model files (~100-500MB) fit easily in Cloud Storage
+
+**No database needed:**
+- **In-memory:** Use in-memory storage for demo (detections, alerts)
+- **Skip persistence:** For capstone demo, persistence is optional
+- **Alternative:** Cloud SQL or Firestore if persistence needed (may use more credits)
+
+**No Redis/cache needed:**
+- **Simplified:** Skip caching for capstone demo
+- **Time savings:** Caching adds complexity without essential benefit
+- **Future work:** Can add Cloud Memorystore (Redis) if time allows
+
+**Cost Management:**
+
+**Monitor credit usage:**
+- **Cloud Run:** Pay per request and compute time (very low for demo traffic)
+- **Cloud Storage:** Pay per GB stored and operations (minimal for single model)
+- **Cloud Build:** Pay per build minute (only when deploying)
+- **Estimated cost:** <$10/month for low-traffic demo (well within university credits)
+
+**Best practices:**
+- **Set budget alerts:** Configure budget alerts to monitor credit usage
+- **Scale to zero:** Cloud Run scales to zero when not in use (saves credits)
+- **Clean up:** Delete unused resources (old images, test deployments)
+
+**Deployment Checklist:**
+- [ ] Set up GCP project with university account
+- [ ] Enable required APIs (Cloud Run, Cloud Storage, Cloud Build)
+- [ ] Create Cloud Storage bucket for model files
+- [ ] Upload model file (.pt) to Cloud Storage
+- [ ] Create Dockerfile for application
+- [ ] Test Docker image locally
+- [ ] Build Docker image with Cloud Build
+- [ ] Deploy to Cloud Run
+- [ ] Configure environment variables and resource limits
+- [ ] Test deployed system (UI loads, detection workflow works)
+- [ ] Set up budget alerts for credit monitoring
+- [ ] Document deployment URL and access instructions
+- [ ] Create demo video/screenshots of deployed system
+
+---
+
+### 6.3 Alternative: Simple Cloud Deployment (If Needed)
+
+**When to Consider Alternatives:**
+
+If GCP deployment has issues or team prefers different approach, consider these alternatives.
+
+**Component-by-Component Approach:**
+
+**Frontend:**
+- **Streamlit Cloud:** Simplest if using Streamlit (free, automatic deployment)
+- **Vercel (free tier):** If using HTML/JavaScript frontend (good for static sites)
+- **Why these:** Free, simple, sufficient for capstone demo
+
+**API/Model:**
+- **GCP Cloud Run:** Recommended primary option (uses university credits)
+- **Railway (free tier):** Alternative if GCP doesn't work (simple deployment, Docker-based)
+- **Why these:** Simple deployment, no infrastructure management
+
+**Database:**
+- **SQLite (file-based):** Simplest database option (no external service needed)
+- **Skip database:** For capstone demo, database may not be needed
+- **Why SQLite:** No setup required, works for simple persistence needs
+
+**Storage:**
+- **GCP Cloud Storage:** Recommended for model files (uses university credits)
+- **Local files in container:** Store files in Docker image (simpler but less flexible)
+- **Why Cloud Storage:** Easy updates, separate from container, cost-effective
+
+**Cost Analysis:**
+
+**With university credits:**
+- **GCP services:** Covered by university credits (monitor usage)
+- **Estimated usage:** <$10/month for low-traffic demo
+- **No out-of-pocket:** Credits should be sufficient for capstone duration
+
+**Without credits (backup plan):**
+- **Free tiers:** Streamlit Cloud, Railway free tier (limited)
+- **Local deployment:** Docker container (no cost)
+- **Total cost:** $0 if using free alternatives
+
+**When to use alternatives:**
+- **GCP access issues:** If university GCP account setup is delayed
+- **Team preference:** If team has experience with specific platform
+- **Credit limits:** If credits are insufficient (unlikely for capstone)
+
+---
+
+## 7. Testing & Validation
+
+Testing and validation ensure the system works correctly, performs well, and meets requirements. For a capstone project, comprehensive testing demonstrates system reliability and academic rigor.
+
+**Testing Philosophy:**
+
+- **Comprehensive but practical:** Test all components without excessive complexity
+- **Model-focused:** Prioritize model validation (most important for capstone)
+- **End-to-end:** Ensure entire pipeline works together
+- **Documentation:** Test results are essential for capstone report
+
+---
+
+### 7.1 Testing Levels
+
+**Why Multiple Testing Levels?**
+
+Different testing levels catch different types of issues. Unit tests find code bugs, integration tests find system issues, and model validation ensures ML performance.
+
+#### 8.1.1 Unit Tests
+
+Unit tests verify individual components work correctly in isolation. Each function or class is tested independently.
+
+**Why Unit Tests Matter:**
+
+- **Early bug detection:** Catch bugs before integration
+- **Confidence:** Know each component works before combining
+- **Refactoring safety:** Can change code knowing tests will catch regressions
+- **Documentation:** Tests serve as examples of how components work
+
+**Component Testing Rationale:**
+
+**Preprocessing:**
+- **Normalization:** Verify values are in correct range (0-1), no NaN/Inf
+- **Resampling:** Verify resolution changes are correct, no data loss
+- **Patching:** Verify patches are correct size, no boundary issues
+- **Why test:** Preprocessing bugs cause model failures (wrong input format)
+
+**Model:**
+- **Forward pass:** Verify model runs without errors, produces output
+- **Output shapes:** Verify output shape matches expected (batch, channels, height, width)
+- **Output range:** Verify output values are in correct range (0-1 for probabilities)
+- **Why test:** Model bugs cause inference failures or incorrect predictions
+
+**Postprocessing:**
+- **Polygon extraction:** Verify polygons are valid GeoJSON, correct coordinates
+- **Area calculation:** Verify area calculations are correct (test with known areas)
+- **Coordinate conversion:** Verify WGS84 ↔ UTM conversions are accurate
+- **Why test:** Postprocessing bugs cause incorrect results even if model is correct
+
+**API:**
+- **Endpoint validation:** Verify endpoints accept valid requests, reject invalid ones
+- **Error handling:** Verify correct error codes and messages for various error cases
+- **Response format:** Verify responses match schema, correct data types
+- **Why test:** API bugs prevent users from using the system
+
+**Unit Testing Scope for Capstone:**
+- **Focus on critical paths:** Test main functionality, not every edge case
+- **Model and preprocessing:** Most important - these affect ML performance
+- **API basics:** Test main endpoints, basic error handling
+- **Skip exhaustive testing:** Don't need 100% coverage for capstone
+
+#### 8.1.2 Integration Tests
+
+Integration tests verify that multiple components work together correctly. They test the interaction between components, not individual components.
+
+**Why Integration Tests Matter:**
+
+- **System behavior:** Individual components may work but fail when combined
+- **Data flow:** Verify data flows correctly through entire pipeline
+- **Error propagation:** Verify errors are handled correctly across components
+- **Real-world simulation:** Tests simulate actual usage scenarios
+
+**Integration Test Rationale:**
+
+**End-to-end detection:**
+- **What it tests:** Full pipeline from API request → imagery fetch → model inference → postprocessing → response
+- **Why it matters:** Most realistic test - if this works, system works
+- **What to verify:** Correct response format, reasonable processing time, no crashes
+
+**Sentinel API integration:**
+- **What it tests:** Fetching imagery from Sentinel API, handling API errors, processing API responses
+- **Why it matters:** External API is critical dependency - must handle failures gracefully
+- **What to verify:** Successful fetch, error handling (rate limits, no data available), timeout handling
+
+**Database (if used):**
+- **What it tests:** Storing and retrieving detections, alerts, user data
+- **Why it matters:** Database bugs cause data loss or incorrect retrieval
+- **What to verify:** CRUD operations work, data integrity, query correctness
+
+**Alerts (if implemented):**
+- **What it tests:** Detection triggers alert, alert is formatted correctly, notification is sent
+- **Why it matters:** Alert system must work reliably (critical for real-world use)
+- **What to verify:** Alert generation, notification delivery, alert content correctness
+
+**Integration Testing Scope for Capstone:**
+- **Focus on main workflows:** Test primary use cases (detection, results display)
+- **Skip complex scenarios:** Don't need to test every possible combination
+- **Mock external services:** Use mocks for Sentinel API to avoid rate limits and costs
+
+#### 8.1.3 Model Validation
+
+Model validation tests the trained model's performance on unseen data. This is the most important testing for a capstone project focused on ML.
+
+**Why Model Validation Matters:**
+
+- **Performance verification:** Ensures model meets success criteria (Section 1.4)
+- **Generalization:** Tests if model works on new data (not just training data)
+- **Failure analysis:** Identifies where model fails (edge cases, geographic biases)
+- **Academic requirement:** Essential for capstone report - must demonstrate model quality
+
+**Model Validation Test Rationale:**
+
+**Test set metrics:**
+- **What it tests:** Model performance on held-out test set (never seen during training)
+- **Why it matters:** Most important validation - tests true generalization
+- **Metrics:** IoU, Dice, Precision, Recall (see Section 3.6)
+- **Targets:** Must meet success criteria (IoU ≥ 0.70, etc.)
+
+**Geographic generalization:**
+- **What it tests:** Model performance on Catalonia (target region) vs training regions
+- **Why it matters:** Tests transfer learning effectiveness - model must work on Catalonia
+- **Comparison:** Compare Catalonia metrics vs general test set metrics
+- **Analysis:** If performance drops on Catalonia, investigate geographic bias
+
+**Temporal generalization:**
+- **What it tests:** Model performance on recent fires (not in training data)
+- **Why it matters:** Tests if model works on new fires (temporal generalization)
+- **Data:** Use fires from 2024-2025 (after training data cutoff)
+- **Analysis:** Identifies if model is overfitted to training time period
+
+**Edge cases:**
+- **What it tests:** Model performance on challenging scenarios (clouds, smoke, urban areas, water)
+- **Why it matters:** Real-world data has edge cases - model must handle them
+- **Scenarios:**
+  - **Clouds:** Heavy cloud cover may obscure fires
+  - **Smoke:** Smoke plumes may be confused with fires or obscure fires
+  - **Urban areas:** Hot surfaces (rooftops, roads) may trigger false positives
+  - **Water:** Water bodies should never be detected as fires
+- **Analysis:** Document failure modes, identify improvement areas
+
+**Model Validation Scope for Capstone:**
+- **Comprehensive:** Model validation is most important - allocate significant time
+- **Multiple test sets:** Test set, Catalonia validation set, edge case examples
+- **Detailed analysis:** Error analysis, confusion matrices, visual examples
+- **Documentation:** All validation results must be in capstone report
+
+---
+
+### 7.2 Catalonia Validation Set (Mandatory)
+
+**Why Catalonia Validation Set is Mandatory?**
+
+The project focuses on Catalonia, so the model must be validated specifically on Catalonia data. This tests transfer learning and ensures the model works on the target region.
+
+**Why This Matters:**
+
+- **Project focus:** System is designed for Catalonia - must validate on Catalonia
+- **Transfer learning test:** Tests if model generalizes from training regions to Catalonia
+- **Academic requirement:** Demonstrates real-world applicability
+- **Geographic bias detection:** Identifies if model is biased toward training regions
+
+**Creation Process Rationale:**
+
+**1. Obtain fire perimeters:**
+- **Source:** Generalitat de Catalunya (official government data)
+- **Time period:** 2023-2024 fires (recent, not in training data)
+- **Format:** CSV with fire perimeters (coordinates, dates, areas)
+- **Why this source:** Authoritative, official data ensures ground truth quality
+
+**2. Download Sentinel-2 imagery:**
+- **Matching dates:** Download imagery for dates when fires occurred
+- **Region:** Catalonia bounding box (covers all fire locations)
+- **Product:** Sentinel-2 L2A (atmospherically corrected)
+- **Why match dates:** Need imagery from fire dates to create accurate ground truth
+
+**3. Create ground truth masks:**
+- **Method:** Convert fire perimeters (polygons) to raster masks
+- **Resolution:** Match model input resolution (10-20m)
+- **Alignment:** Ensure masks align with Sentinel-2 imagery (same coordinate system)
+- **Why raster masks:** Model expects raster masks for training/evaluation
+
+**4. Evaluate model:**
+- **Metrics:** Calculate IoU, Dice, Precision, Recall on Catalonia validation set
+- **Comparison:** Compare with general test set metrics
+- **Analysis:** Identify performance differences, explain transfer learning effectiveness
+
+**Requirements Rationale:**
+
+**Mandatory (not optional):**
+- **Project requirement:** System is for Catalonia - must validate on Catalonia
+- **Academic rigor:** Demonstrates thorough validation approach
+- **Real-world relevance:** Shows system works on target region
+
+**Document creation process:**
+- **Reproducibility:** Others must be able to recreate Catalonia validation set
+- **Transparency:** Shows how ground truth was created from government data
+- **Academic documentation:** Required for capstone report
+
+**Report separate metrics:**
+- **Comparison:** Catalonia vs general test set performance
+- **Analysis:** Why performance differs (if it does) - geographic bias, data distribution
+- **Transfer learning:** Demonstrates if model transfers well to Catalonia
+
+**Include in final report:**
+- **Essential component:** Catalonia validation is key project deliverable
+- **Demonstrates applicability:** Shows system works on target region
+- **Academic value:** Demonstrates understanding of transfer learning and validation
+
+---
+
+### 7.3 Performance Benchmarks
+
+Performance benchmarks measure system speed and capacity. They ensure the system is fast enough for practical use and can handle expected load.
+
+**Why Performance Benchmarks Matter:**
+
+- **Usability:** Slow systems frustrate users
+- **Real-world feasibility:** System must be fast enough for practical use
+- **Resource planning:** Helps determine hardware requirements
+- **Academic value:** Demonstrates understanding of system performance
+
+**Benchmark Targets Rationale:**
+
+**Single tile inference (< 5 seconds):**
+- **What it measures:** Time to process one 256×256 patch through model
+- **Why this target:** Fast enough for interactive use, reasonable for GPU inference
+- **Factors:** Model size, GPU vs CPU, batch size
+- **Why important:** Users expect responsive system
+
+**API response uncached (< 30 seconds):**
+- **What it measures:** Time from API request to response (including imagery fetch, inference, postprocessing)
+- **Why this target:** Acceptable for capstone demo (not production requirement)
+- **Breakdown:** Imagery fetch (10-20s) + inference (5s) + postprocessing (2-5s)
+- **Why important:** Total user wait time must be reasonable
+
+**API response cached (< 2 seconds):**
+- **What it measures:** Response time when imagery is cached (no fetch needed)
+- **Why this target:** Fast response for repeated requests
+- **Caching:** Cache recently fetched imagery to avoid repeated API calls
+- **Why important:** Improves user experience for repeated analyses
+
+**Concurrent requests (10 simultaneous):**
+- **What it measures:** System can handle multiple requests at once
+- **Why this target:** Reasonable for capstone demo (not production scale)
+- **Testing:** Send 10 simultaneous requests, verify all complete successfully
+- **Why important:** Tests system stability and resource handling
+
+**Performance Benchmarking Scope:**
+- **Focus on main operations:** Test detection workflow, not every operation
+- **Realistic scenarios:** Test with typical bounding box sizes, not edge cases
+- **Document results:** Include performance metrics in capstone report
+
+---
+
+### 7.4 User Acceptance Testing
+
+User acceptance testing (UAT) verifies that the system is usable and meets user needs. It tests the system from an end-user perspective, not a technical perspective.
+
+**Why User Acceptance Testing Matters:**
+
+- **Usability verification:** Ensures system is actually usable, not just functional
+- **User perspective:** Tests what users care about (not technical details)
+- **Demo preparation:** Identifies issues before capstone presentation
+- **Academic value:** Demonstrates system is complete and usable
+
+**UAT Test Rationale:**
+
+**Detection workflow:**
+- **What it tests:** User can select region, select date, run detection, view results
+- **Why it matters:** Core functionality - if this doesn't work, system is unusable
+- **Success criteria:** User can complete workflow without confusion or errors
+- **Testing:** Have someone unfamiliar with system try to use it
+
+**Results display:**
+- **What it tests:** Fire polygons visible on map, statistics displayed clearly
+- **Why it matters:** Users must be able to see and understand results
+- **Success criteria:** Results are clear, map is readable, statistics are understandable
+- **Testing:** Verify polygons render correctly, map is interactive, statistics are accurate
+
+**Alert subscription (if implemented):**
+- **What it tests:** User can subscribe to alerts and receive test alert
+- **Why it matters:** Alert system must work for users who want notifications
+- **Success criteria:** Subscription works, alert is received, alert content is correct
+- **Testing:** Subscribe, trigger test detection, verify alert delivery
+
+**Export functionality:**
+- **What it tests:** GeoJSON downloads correctly and opens in QGIS (or other GIS software)
+- **Why it matters:** Users may want to use results in other tools
+- **Success criteria:** File downloads, opens in QGIS, data is correct
+- **Testing:** Download GeoJSON, open in QGIS, verify polygons and attributes
+
+**Mobile usability:**
+- **What it tests:** Dashboard is usable on mobile phone (responsive design)
+- **Why it matters:** Users may access system from mobile devices
+- **Success criteria:** Interface is readable, controls are usable, map is interactive
+- **Testing:** Open dashboard on phone, test main workflows
+
+**UAT Scope for Capstone:**
+- **Focus on core workflows:** Test main use cases, not every feature
+- **Real users:** Have someone unfamiliar with system test it (catches usability issues)
+- **Document issues:** Note any usability problems, even if not fixed
+- **Demo preparation:** UAT helps prepare for capstone presentation
+
+---
+
+## 8. Project Timeline
+
+### 8.1 Phase Overview
+
+| Phase | Duration | Focus | Key Deliverables |
+|-------|----------|-------|-----------------|
+| Phase 1 | 3 weeks | Data preparation & exploration | Processed datasets, data quality report, Catalonia validation set |
+| Phase 2 | 4 weeks | Model development & optimization | Trained model, baseline comparisons, hyperparameter tuning results |
+| Phase 3 | 2 weeks | UI development | Streamlit dashboard with map and controls |
+| Phase 4 | 1 week | Deployment | Deployed system on GCP Cloud Run |
+| Phase 5 | 2 weeks | Testing, validation & documentation | Comprehensive evaluation report, model card, documentation |
+
+**Total: 12 weeks (includes buffer for unexpected delays)**
+
+**Note:** API development is optional. If implementing an API, see `optional_api_design.md`. This adds 2 weeks (Phase 3 becomes API, Phase 4 becomes UI, etc.).
+
+---
+
+### 8.2 Detailed Implementation Plan
+
+#### Phase 1: Data Preparation & Exploration (Weeks 1-3)
+
+**Week 1: Dataset Acquisition & Setup**
+
+**1.1 Environment & Tool Setup**
+- [ ] Set up Python environment (conda/venv) with required packages
+- [ ] Install core libraries: `torch`, `rasterio`, `geopandas`, `sentinelsat`, `pystac-client`, `segmentation_models_pytorch`, `wandb`, `optuna`
+- [ ] Set up Git repository with proper `.gitignore`
+- [ ] Create project directory structure (data/, models/, notebooks/, src/, tests/)
+- [ ] Set up Weights & Biases (W&B) account and create project
+- [ ] Configure W&B project settings (entity, project name, tags)
+
+**1.2 Primary Dataset Download**
+- [ ] Download CEMS-Wildfire dataset from HuggingFace (primary dataset)
+  - [ ] Extract and organize dataset files
+  - [ ] Verify dataset structure and annotations
+  - [ ] Document dataset version and source
+- [ ] Download EO4WildFires dataset (secondary, large-scale dataset)
+  - [ ] Extract relevant subsets if full dataset is too large
+  - [ ] Document which events/subset are used
+- [ ] Download Sen2Fire or Land8Fire dataset (additional diversity)
+  - [ ] Choose based on availability and download speed
+  - [ ] Document selection rationale
+
+**1.3 Data Versioning Setup**
+- [ ] Set up cloud storage for processed datasets (Google Drive, Dropbox, or GCP Cloud Storage)
+- [ ] Create `data/README.md` template for documenting dataset versions
+- [ ] Document storage location and access instructions
+- [ ] (Optional) Set up checksum calculation for data integrity verification
+
+**Week 2: Data Preprocessing & Quality Exploration**
+
+**2.1 Preprocessing Pipeline Implementation**
+- [ ] Implement Sentinel-2 band selection (B2, B3, B4, B8, B8A, B11, B12)
+- [ ] Implement resolution harmonization (resample all bands to 10m or 20m)
+- [ ] Implement normalization (per-band min-max or z-score normalization)
+- [ ] Implement patch extraction (256×256 patches)
+- [ ] Implement coordinate system handling (WGS84 ↔ UTM conversions)
+- [ ] Test preprocessing pipeline on sample images
+- [ ] Document preprocessing parameters and choices
+
+**2.2 Data Quality & Exploration (Comprehensive)**
+- [ ] Create data exploration notebook template
+- [ ] **Class distribution analysis:**
+  - [ ] Calculate fire vs non-fire pixel ratios per dataset
+  - [ ] Visualize class distribution histograms
+  - [ ] Document class imbalance severity
+- [ ] **Geographic distribution analysis:**
+  - [ ] Map fire event locations on world map
+  - [ ] Identify geographic coverage gaps
+  - [ ] Document regional distribution
+- [ ] **Temporal distribution analysis:**
+  - [ ] Plot fire events over time (monthly/yearly)
+  - [ ] Identify temporal coverage and gaps
+- [ ] **Cloud cover statistics:**
+  - [ ] Calculate cloud cover percentage per image
+  - [ ] Identify heavily clouded images
+  - [ ] Document cloud filtering strategy
+- [ ] **Band value ranges:**
+  - [ ] Calculate min/max/mean/std for each band
+  - [ ] Identify outliers or anomalies
+  - [ ] Document normalization ranges
+- [ ] **Missing data handling:**
+  - [ ] Check for NaN/Inf values
+  - [ ] Document missing data strategy
+- [ ] **Ground truth alignment:**
+  - [ ] Verify mask alignment with imagery
+  - [ ] Check coordinate system consistency
+- [ ] **Sample review:**
+  - [ ] Visually inspect random samples for annotation errors
+  - [ ] Document any quality issues found
+- [ ] **Coordinate system validation:**
+  - [ ] Verify all data uses consistent CRS
+  - [ ] Document coordinate system choices
+- [ ] **Duplicate detection:**
+  - [ ] Check for duplicate patches
+  - [ ] Remove duplicates if found
+- [ ] Create data quality report with findings and recommendations
+
+**2.3 Catalonia Validation Data Preparation (Mandatory)**
+- [ ] Obtain 2023-2024 fire perimeters from Generalitat de Catalunya
+  - [ ] Download official fire perimeter data (CSV/Shapefile)
+  - [ ] Document data source and access method
+- [ ] Download corresponding Sentinel-2 imagery for fire dates
+  - [ ] Use `sentinelsat` or Copernicus Data Space API
+  - [ ] Download L2A products for Catalonia region
+  - [ ] Match imagery dates with fire occurrence dates
+- [ ] Create ground truth masks from fire perimeters
+  - [ ] Convert polygon perimeters to raster masks
+  - [ ] Align masks with Sentinel-2 imagery (same CRS, resolution)
+  - [ ] Verify mask quality and alignment
+- [ ] Document Catalonia validation set creation process
+- [ ] Store Catalonia validation set separately (not in training data)
+
+**Week 3: Dataset Splitting & Augmentation Setup**
+
+**3.1 Dataset Split Strategy**
+- [ ] Implement geographic validation split (no spatial overlap between train/val/test)
+- [ ] Create train/validation/test splits (70/15/15 or 80/10/10)
+  - [ ] Ensure no temporal leakage (train on older data, test on newer)
+  - [ ] Ensure geographic separation (different regions in each split)
+- [ ] Verify split statistics (class distribution, geographic coverage)
+- [ ] Document split methodology and rationale
+- [ ] Save split indices/metadata for reproducibility
+
+**3.2 Class Imbalance Handling Setup**
+- [ ] Analyze class distribution in training set
+- [ ] Implement loss weighting strategy
+  - [ ] Calculate class weights based on inverse frequency
+  - [ ] Configure weighted BCE loss
+- [ ] Implement weighted sampling (if using)
+  - [ ] Create weighted sampler for DataLoader
+- [ ] Implement patch filtering (remove patches with <5% fire pixels if needed)
+- [ ] Document class imbalance strategy and chosen approach
+
+**3.3 Data Augmentation Implementation**
+- [ ] Implement geometric augmentations (rotation, flipping, scaling)
+- [ ] Implement spectral augmentations (brightness, contrast, noise)
+- [ ] Implement spatial augmentations (translation, elastic deformation)
+- [ ] Test augmentation pipeline on sample patches
+- [ ] Configure augmentation parameters (probability, ranges)
+- [ ] Document augmentation strategy and parameters
+
+**3.4 Data Pipeline Finalization**
+- [ ] Create PyTorch Dataset class for training data
+- [ ] Create PyTorch Dataset class for validation/test data
+- [ ] Test data loading pipeline (verify shapes, types, augmentations)
+- [ ] Measure data loading performance
+- [ ] Document final data pipeline architecture
+
+**Phase 1 Deliverables:**
+- ✅ Processed and organized datasets
+- ✅ Data quality exploration notebook with visualizations
+- ✅ Data versioning documentation created (data/README.md with storage links)
+- ✅ Catalonia validation set created and documented
+- ✅ Train/val/test splits with geographic validation
+- ✅ Data preprocessing pipeline implemented and tested
+- ✅ Class imbalance handling strategy implemented
+- ✅ Data augmentation pipeline implemented
+- ✅ Data quality report document
+
+---
+
+#### Phase 2: Model Development & Optimization (Weeks 4-7)
+
+**Week 4: Initial Architecture & Training Setup**
+
+**4.1 (Optional) Baseline Model Implementation**
+- [ ] **Note:** Baseline models are optional. See `optional-basline-models-comparison.md` for implementation details.
+- [ ] If implementing baselines:
+  - [ ] **Threshold-based baseline:** Implement SWIR-based threshold detection, tune values, evaluate
+  - [ ] **Random Forest baseline:** Implement feature extraction, train classifier, evaluate
+  - [ ] Create baseline comparison report
+  - [ ] Visualize baseline predictions vs ground truth
+
+**4.2 U-Net Architecture Setup**
+- [ ] Set up `segmentation_models_pytorch` library
+- [ ] Implement U-Net with pretrained encoder (ResNet-34 or EfficientNet-B0)
+- [ ] Configure model input/output (7-channel input, 1-channel binary output)
+- [ ] Test model forward pass (verify output shapes)
+- [ ] Calculate model parameters and size
+- [ ] Document architecture choice and rationale
+
+**4.3 Training Infrastructure Setup**
+- [ ] Configure PyTorch DataLoader:
+  - [ ] Set `num_workers` (4-8 for CPU, 2-4 per GPU)
+  - [ ] Set `pin_memory=True` if using GPU
+  - [ ] Set `prefetch_factor=2-4`
+  - [ ] Set `persistent_workers=True`
+  - [ ] Configure `shuffle=True` for training, `False` for validation
+- [ ] Set up model checkpointing strategy:
+  - [ ] Implement best model checkpointing (based on validation IoU)
+  - [ ] Implement periodic checkpointing (every N epochs)
+  - [ ] Configure checkpoint directory structure
+- [ ] Set up W&B logging:
+  - [ ] Log hyperparameters, training metrics, validation metrics
+  - [ ] Log sample predictions (images) periodically
+  - [ ] Configure W&B project settings
+
+**Week 5: Initial Training & Loss Function Selection**
+
+**5.1 Loss Function Implementation**
+- [ ] Implement combined BCE + Dice Loss
+- [ ] Implement Focal Loss (as alternative)
+- [ ] Configure loss weights (BCE weight: 0.5, Dice weight: 0.5)
+- [ ] Test loss functions on sample predictions
+- [ ] Document loss function choice and rationale
+
+**5.2 Optimizer & Learning Rate Setup**
+- [ ] Configure AdamW optimizer:
+  - [ ] Set learning rate (initial: 1e-4 or 3e-4)
+  - [ ] Set weight decay (1e-4)
+  - [ ] Set betas (0.9, 0.999)
+- [ ] Configure learning rate schedule:
+  - [ ] Implement ReduceLROnPlateau (recommended)
+  - [ ] Set patience (5-10 epochs), factor (0.5), min_lr (1e-6)
+- [ ] Document optimizer and schedule choices
+
+**5.3 Initial Training Run**
+- [ ] Train baseline U-Net model for 20-30 epochs
+- [ ] Monitor training/validation loss and metrics
+- [ ] Log to W&B (loss curves, metrics, sample predictions)
+- [ ] Evaluate on validation set after training
+- [ ] Analyze training curves (overfitting, convergence)
+- [ ] Save best model checkpoint
+
+**Week 6: Hyperparameter Tuning**
+
+**6.1 Optuna Setup**
+- [ ] Set up Optuna study for hyperparameter optimization
+- [ ] Define search space:
+  - [ ] Learning rate: [1e-5, 1e-3] (log scale)
+  - [ ] Encoder: ['resnet34', 'efficientnet-b0']
+  - [ ] Batch size: [8, 16, 32] (based on GPU memory)
+  - [ ] Loss weights: BCE [0.3, 0.7], Dice [0.3, 0.7]
+  - [ ] Dropout: [0.0, 0.3] (if using)
+- [ ] Configure Optuna study (direction: maximize validation IoU)
+- [ ] Set up pruning (MedianPruner or HyperbandPruner)
+
+**6.2 Hyperparameter Tuning Execution**
+- [ ] Run Optuna optimization (20-50 trials)
+- [ ] Monitor trials in Optuna dashboard
+- [ ] Let trials run (may take 1-2 days depending on resources)
+- [ ] Analyze hyperparameter importance (Optuna feature importance)
+- [ ] Select best hyperparameters based on validation IoU
+- [ ] Document tuning results and best hyperparameters
+
+**6.3 Final Model Training**
+- [ ] Train final model with best hyperparameters
+- [ ] Train for full epoch budget (50-100 epochs) with early stopping
+- [ ] Monitor training closely (W&B dashboard)
+- [ ] Save best model checkpoint (based on validation IoU)
+- [ ] Export final model for deployment (PyTorch .pt format)
+
+**Week 7: Model Evaluation & Analysis**
+
+**7.1 Comprehensive Model Evaluation**
+- [ ] Evaluate final model on test set:
+  - [ ] Calculate primary metrics (IoU, Dice, Precision, Recall)
+  - [ ] Calculate secondary metrics (Pixel Accuracy, FPR, Detection Latency)
+  - [ ] Verify metrics meet success criteria (Section 1.4)
+- [ ] **Evaluate on Catalonia validation set (Mandatory):**
+  - [ ] Calculate same metrics on Catalonia set
+  - [ ] Compare Catalonia performance vs general test set
+  - [ ] Analyze transfer learning effectiveness
+  - [ ] Document performance differences
+- [ ] Create confusion matrices (per-patch, per-event, aggregate)
+- [ ] Perform threshold optimization (ROC and PR curves)
+- [ ] Document all evaluation results
+
+**7.2 Error Analysis**
+- [ ] Identify common failure modes:
+  - [ ] False positives (clouds, urban areas, water)
+  - [ ] False negatives (small fires, smoke-obscured fires)
+- [ ] Create visual examples of failures
+- [ ] Analyze geographic biases (performance by region)
+- [ ] Analyze temporal biases (performance by season)
+- [ ] Document error analysis findings
+
+**7.3 (Optional) Baseline Comparison**
+- [ ] **Note:** Baseline comparison is optional. Only if baselines were implemented (see `optional-basline-models-comparison.md`).
+- [ ] If baselines were implemented:
+  - [ ] Compare final model with baseline models (threshold-based, Random Forest)
+  - [ ] Create comparison table (all metrics)
+  - [ ] Visual comparison (same examples, all methods)
+  - [ ] Document why deep learning outperforms (or investigate if it doesn't)
+
+**7.4 Model Documentation**
+- [ ] Create model card:
+  - [ ] Model architecture and hyperparameters
+  - [ ] Training data description
+  - [ ] Performance metrics (test set, Catalonia validation)
+  - [ ] Limitations and failure modes
+  - [ ] Intended use and recommendations
+- [ ] Create training report:
+  - [ ] Hyperparameter tuning results
+  - [ ] Training curves (loss, metrics over epochs)
+  - [ ] Validation results
+  - [ ] Best hyperparameters and rationale
+- [ ] Export model in deployment format (PyTorch .pt)
+
+**Phase 2 Deliverables:**
+- ✅ U-Net model trained and optimized
+- ✅ (Optional) Baseline models implemented and evaluated (see `optional-basline-models-comparison.md`)
+- ✅ Hyperparameter tuning completed (Optuna results)
+- ✅ Final model evaluated on test set and Catalonia validation set
+- ✅ Comprehensive evaluation report with metrics and error analysis
+- ✅ Model card and training report
+- ✅ Model exported for deployment
+
+---
+
+#### Phase 3: User Interface Development (Weeks 8-9)
+
+**Note:** API implementation is optional. If you want to implement a separate API layer, see `optional_api_design.md`. For this capstone, Streamlit can load the model directly without needing a separate API.
+
+**Week 8: Streamlit Setup & Core Components**
+
+**8.1 Streamlit Project Setup**
+- [ ] Create Streamlit project structure
+- [ ] Install Streamlit and dependencies (`folium`, `geopandas`, etc.)
+- [ ] Set up Streamlit app entry point (`app.py` or `main.py`)
+- [ ] Configure Streamlit settings (page title, layout)
+
+**8.2 Map Component**
+- [ ] Implement interactive map using `folium`:
+  - [ ] Set default view (Catalonia region)
+  - [ ] Enable map interaction (pan, zoom)
+  - [ ] Add bounding box selection tool (draw rectangle on map)
+- [ ] Test map component functionality
+
+**8.3 Model Integration & Detection Controls**
+- [ ] Implement model loading function (load PyTorch .pt model from Cloud Storage or local file)
+- [ ] Implement inference function:
+  - [ ] Preprocess input imagery (normalization, patching)
+  - [ ] Run model forward pass
+  - [ ] Postprocess output (threshold, polygon extraction)
+- [ ] Implement Sentinel-2 imagery fetching (Copernicus Data Space API)
+- [ ] Implement date picker (select date for imagery)
+- [ ] Implement bounding box input (from map selection or manual input)
+- [ ] Implement threshold slider (adjust detection threshold)
+- [ ] Implement "Run Detection" button (triggers: fetch imagery → preprocess → model inference → postprocess → display)
+- [ ] Add loading indicator during detection
+- [ ] Test end-to-end detection workflow
+
+**Week 9: Results Display & Export**
+
+**9.1 Results Display**
+- [ ] Implement fire polygon overlay on map:
+  - [ ] Display detected fire polygons on map
+  - [ ] Color-code polygons (e.g., red for fires)
+  - [ ] Add polygon tooltips (area, confidence)
+- [ ] Implement statistics display:
+  - [ ] Total fire area (hectares)
+  - [ ] Number of fire events
+  - [ ] Detection confidence
+  - [ ] Processing time
+- [ ] Implement confidence map visualization (optional)
+- [ ] Test results display with sample detections
+
+**9.2 Export Functionality**
+- [ ] Implement GeoJSON download:
+  - [ ] Convert fire polygons to GeoJSON format
+  - [ ] Add download button
+  - [ ] Test GeoJSON opens correctly in QGIS
+- [ ] Test export functionality
+
+**9.3 UI Polish & Testing**
+- [ ] Basic styling (colors, fonts, layout)
+- [ ] Improve UI/UX (clear labels, helpful messages)
+- [ ] Test complete user workflow:
+  - [ ] Select region and date
+  - [ ] Run detection
+  - [ ] View results on map
+  - [ ] Export GeoJSON
+- [ ] Test on different screen sizes (responsive design)
+- [ ] Create UI screenshots for documentation
+
+**Phase 3 Deliverables:**
+- ✅ Streamlit dashboard with interactive map
+- ✅ Model integrated (loads directly in Streamlit, no API needed)
+- ✅ Sentinel-2 imagery fetching integrated
+- ✅ Detection controls (date picker, bbox selection, threshold)
+- ✅ End-to-end detection workflow (fetch → preprocess → inference → postprocess → display)
+- ✅ Results display (fire polygons on map, statistics)
+- ✅ GeoJSON export functionality
+- ✅ Polished UI ready for demo
+
+---
+
+#### Phase 4: Deployment (Week 10)
+
+**10.1 GCP Project Setup**
+- [ ] Set up GCP project with university account
+- [ ] Enable required APIs (Cloud Run, Cloud Storage, Cloud Build)
+- [ ] Link university billing account (uses credits)
+- [ ] Verify available credits are sufficient
+- [ ] Set up budget alerts for credit monitoring
+
+**10.2 Model Storage Setup**
+- [ ] Create Cloud Storage bucket for model files
+- [ ] Upload PyTorch model (.pt file) to Cloud Storage bucket
+- [ ] Set appropriate bucket permissions (private, accessible by Cloud Run)
+- [ ] Document model version and metadata
+- [ ] Test model download from Cloud Storage
+
+**10.3 Docker & Cloud Build Setup**
+- [ ] Create Dockerfile for Streamlit application
+- [ ] Test Docker image locally (build and run)
+- [ ] Configure Cloud Build to build from Git repository
+- [ ] Set up Cloud Build triggers (automatic build on Git push)
+- [ ] Test Cloud Build process
+
+**10.4 Cloud Run Deployment**
+- [ ] Deploy container to Cloud Run
+- [ ] Configure Cloud Run service:
+  - [ ] Set environment variables (model path, API keys, etc.)
+  - [ ] Set memory and CPU limits
+  - [ ] Configure timeout settings
+  - [ ] Set minimum instances (0 for cost savings)
+- [ ] Get Cloud Run HTTPS URL
+- [ ] Verify deployment succeeds
+
+**10.5 Deployment Testing**
+- [ ] Test deployed system:
+  - [ ] Streamlit UI loads and functions correctly
+  - [ ] Model loads successfully from Cloud Storage
+  - [ ] Detection workflow works end-to-end (select region → detect → view results)
+- [ ] Test with real Catalonia region and recent date
+- [ ] Verify performance (response times acceptable)
+- [ ] Monitor Cloud Run logs for errors
+- [ ] Check credit usage (should be minimal)
+- [ ] Document deployment URL and access instructions
+
+**10.6 Demo Preparation**
+- [ ] Create demo video:
+  - [ ] Record screen showing complete workflow
+  - [ ] Show detection on Catalonia region
+  - [ ] Show results and export
+  - [ ] Keep video concise (3-5 minutes)
+- [ ] Create demo screenshots (key features, results)
+- [ ] Document deployment process (for reproducibility)
+- [ ] Document GCP resource usage and costs
+
+**Phase 4 Deliverables:**
+- ✅ System deployed on GCP Cloud Run
+- ✅ Model stored in Cloud Storage
+- ✅ Deployed system tested and working
+- ✅ Credit usage monitored and documented
+- ✅ Demo video and screenshots created
+- ✅ Deployment documentation
+
+---
+
+#### Phase 5: Testing, Validation & Documentation (Weeks 11-12)
+
+**Week 11: Comprehensive Testing**
+
+**11.1 Unit Testing**
+- [ ] Write unit tests for preprocessing functions:
+  - [ ] Normalization, resampling, patching
+  - [ ] Coordinate conversions
+- [ ] Write unit tests for model:
+  - [ ] Forward pass, output shapes, output ranges
+- [ ] Write unit tests for postprocessing:
+  - [ ] Polygon extraction, area calculation
+- [ ] Write unit tests for API:
+  - [ ] Endpoint validation, error handling, response format
+- [ ] Run unit test suite, fix any failures
+
+**11.2 Integration Testing**
+- [ ] Test end-to-end detection pipeline:
+  - [ ] API request → imagery fetch → inference → postprocessing → response
+- [ ] Test Sentinel API integration:
+  - [ ] Successful fetch, error handling, timeout handling
+- [ ] Test database operations (if implemented)
+- [ ] Test alert system (if implemented)
+- [ ] Document integration test results
+
+**11.3 Model Validation (Final)**
+- [ ] Final evaluation on test set:
+  - [ ] Calculate all metrics (IoU, Dice, Precision, Recall, FPR, Pixel Accuracy)
+  - [ ] Create confusion matrices
+  - [ ] Perform threshold optimization
+- [ ] Final evaluation on Catalonia validation set:
+  - [ ] Calculate same metrics
+  - [ ] Compare with test set performance
+  - [ ] Document transfer learning effectiveness
+- [ ] Edge case testing:
+  - [ ] Test on clouds, smoke, urban areas, water
+  - [ ] Document edge case performance
+- [ ] Performance benchmarks:
+  - [ ] Measure single tile inference time (< 5 seconds target)
+  - [ ] Measure API response time (< 30 seconds uncached, < 2 seconds cached)
+  - [ ] Test concurrent requests (10 simultaneous)
+  - [ ] Document benchmark results
+
+**11.4 User Acceptance Testing**
+- [ ] Test detection workflow:
+  - [ ] User can select region, date, run detection
+  - [ ] Workflow is intuitive and error-free
+- [ ] Test results display:
+  - [ ] Fire polygons visible on map
+  - [ ] Statistics displayed clearly
+- [ ] Test export functionality:
+  - [ ] GeoJSON downloads correctly
+  - [ ] GeoJSON opens in QGIS
+- [ ] Test mobile usability:
+  - [ ] Dashboard usable on phone
+- [ ] Document UAT results and any issues found
+
+**Week 12: Documentation & Finalization**
+
+**12.1 Comprehensive Evaluation Report**
+- [ ] Create evaluation report with:
+  - [ ] Test set metrics (all metrics, confusion matrices)
+  - [ ] Catalonia validation set metrics (separate section)
+  - [ ] Baseline comparison (threshold-based, Random Forest)
+  - [ ] Error analysis (failure modes, visual examples)
+  - [ ] Geographic and temporal analysis
+  - [ ] Performance benchmarks
+  - [ ] Threshold optimization results
+- [ ] Include visualizations (curves, confusion matrices, example predictions)
+- [ ] Document all findings and recommendations
+
+**12.2 Model Documentation**
+- [ ] Finalize model card:
+  - [ ] Architecture, hyperparameters, training data
+  - [ ] Performance metrics, limitations, intended use
+- [ ] Finalize training report:
+  - [ ] Hyperparameter tuning process and results
+  - [ ] Training curves, validation results
+  - [ ] Best hyperparameters and rationale
+
+**12.3 Data Documentation**
+- [ ] Document all datasets used:
+  - [ ] Dataset names, sources, sizes, coverage
+  - [ ] Download URLs and access methods
+  - [ ] Dataset versions used
+- [ ] Document preprocessing pipeline:
+  - [ ] All preprocessing steps and parameters
+  - [ ] Normalization ranges, patch sizes
+- [ ] Document dataset splits:
+  - [ ] Split methodology, statistics
+  - [ ] Geographic and temporal distribution
+- [ ] Document Catalonia validation set:
+  - [ ] Creation process, data source
+  - [ ] Ground truth creation methodology
+
+**12.4 Reproducibility Guide**
+- [ ] Create reproducibility guide:
+  - [ ] Environment setup instructions
+  - [ ] Data download and preparation steps
+  - [ ] Model training instructions
+  - [ ] How to reproduce results
+  - [ ] Required software versions
+- [ ] Document all configuration files and parameters
+- [ ] Ensure code is well-commented and organized
+
+**12.5 Final Bug Fixes & Polish**
+- [ ] Fix any bugs found during testing
+- [ ] Improve code quality (comments, documentation)
+- [ ] Ensure all code is properly version controlled
+- [ ] Create final project README with overview and setup
+
+**12.6 Presentation Preparation**
+- [ ] Prepare capstone presentation:
+  - [ ] Project overview and objectives
+  - [ ] Methodology (data, model, training)
+  - [ ] Results (metrics, visualizations, comparisons)
+  - [ ] Demo (live or video)
+  - [ ] Conclusions and future work
+- [ ] Practice presentation
+- [ ] Prepare demo (live system or video)
+
+**Phase 5 Deliverables:**
+- ✅ Comprehensive evaluation report (test set, Catalonia validation, baselines, error analysis)
+- ✅ Model card and training report
+- ✅ Data documentation (datasets, preprocessing, splits)
+- ✅ Reproducibility guide
+- ✅ All testing completed (unit, integration, model validation, UAT)
+- ✅ Performance benchmarks documented
+- ✅ Final bug fixes and code polish
+- ✅ Capstone presentation prepared
+
+---
+
+### 8.3 Task Dependencies & Critical Path
+
+**Critical Path (Must Complete in Order):**
+1. Data preparation → Model training → Model evaluation
+2. Model training → UI development (model loaded directly in Streamlit)
+3. UI development → Deployment
+4. All development → Testing & Documentation
+
+**Parallel Work Opportunities:**
+- Data exploration can happen while downloading additional datasets
+- (Optional) Baseline models can be implemented while setting up U-Net (see `optional-basline-models-comparison.md`)
+- Some documentation can be written incrementally during development
+
+**Key Milestones:**
+- **End of Week 3:** Data pipeline complete, ready for training
+- **End of Week 7:** Model trained and evaluated, ready for UI integration
+- **End of Week 9:** UI complete, ready for deployment
+- **End of Week 10:** System deployed, ready for final testing
+- **End of Week 12:** All deliverables complete, ready for presentation
+
+---
+
+### 8.4 Resource Requirements
+
+**Computing Resources:**
+- **GPU:** Recommended for model training (CUDA-capable GPU with 8GB+ VRAM)
+  - Alternatives: Google Colab (free GPU), cloud GPU instances
+- **Storage:** 100-200GB for datasets (external storage recommended)
+- **Memory:** 16GB+ RAM recommended for data processing
+
+**Software & Services:**
+- **Free tier sufficient for capstone:**
+  - HuggingFace Spaces (deployment)
+  - Weights & Biases (experiment tracking)
+  - Copernicus Data Space (Sentinel-2 imagery)
+  - GitHub (code version control)
+
+**Time Allocation:**
+- **Data preparation:** ~25% of total time (critical foundation)
+- **Model development:** ~35% of total time (core ML work)
+- **API/UI development:** ~20% of total time (application layer)
+- **Testing & documentation:** ~20% of total time (validation and reporting)
+
+---
+
+### 8.5 Risk Mitigation in Timeline
+
+**Built-in Buffers:**
+- Extra week in Phase 1 (data preparation often takes longer than expected)
+- Extra week in Phase 2 (model training and tuning can be unpredictable)
+- 2-week buffer in Phase 5 (testing and documentation always takes longer)
+
+**Early Warning Signs:**
+- **Week 3:** If data preparation is behind, prioritize core datasets only
+- **Week 6:** If hyperparameter tuning is slow, reduce trial count (20 instead of 50)
+- **Week 10:** If UI development is slow, simplify UI features
+- **Week 13:** If testing reveals major issues, prioritize critical fixes only
+
+**Contingency Plans:**
+- **Data issues:** Use smaller subset of datasets, focus on CEMS-Wildfire
+- **Model performance:** Extend training time, try different architectures
+- **Deployment issues:** Use simpler deployment (local Docker) as backup
+- **Time constraints:** Prioritize model quality over UI polish
+
+---
+
+
+## Appendix
+
+### A. Resource Links
+
+#### Datasets
+
+| Resource | URL |
+|----------|-----|
+| CEMS-Wildfire Dataset (links-ads) | https://huggingface.co/datasets/links-ads/wildfires-cems |
+| CEMS-Wildfire Dataset (9334hq) | https://huggingface.co/datasets/9334hq/wildfires-cems |
+| CEMS-Wildfire GitHub | https://github.com/MatteoM95/CEMS-Wildfire-Dataset |
+| CEMS-HLS (Alternative) | https://huggingface.co/datasets/morenoj11/CEMS-HLS |
+| EO4WildFires Dataset | https://huggingface.co/datasets/AUA-Informatics-Lab/eo4wildfires |
+| Sen2Fire Dataset | https://github.com/Orion-AI-Lab/Sen2Fire (check arXiv paper) |
+| Sen2Fire Paper | https://arxiv.org/abs/2403.17884 |
+| Land8Fire Dataset | https://www.mdpi.com/2072-4292/17/16/2776 |
+| TS-SatFire Dataset | https://arxiv.org/abs/2412.11555 |
+| S2-WCD Dataset | https://ieee-dataport.org/documents/sentinel-2-wildfire-change-detection-s2-wcd |
+| FireSR Dataset | https://zenodo.org/records/13384289 |
+| FLOGA Dataset | https://arxiv.org/abs/2311.03339 |
+| Active Fire (Landsat-8) | https://arxiv.org/abs/2101.03409 |
+
+#### Data Sources & APIs
+
+| Resource | URL |
+|----------|-----|
+| Copernicus Data Space Browser | https://browser.dataspace.copernicus.eu/ |
+| Copernicus Data Space API | https://documentation.dataspace.copernicus.eu/ |
+| Sentinel Hub API | https://docs.sentinel-hub.com/ |
+| Sentinel Hub Python | https://sentinelhub-py.readthedocs.io/ |
+| sentinelsat Python Library | https://sentinelsat.readthedocs.io/ |
+| pystac-client | https://pystac-client.readthedocs.io/ |
+| NASA FIRMS | https://firms.modaps.eosdis.nasa.gov/ |
+| NASA FIRMS API | https://firms.modaps.eosdis.nasa.gov/api/ |
+| EFFIS Portal | https://effis.jrc.ec.europa.eu/ |
+| EFFIS Active Fires | https://effis.jrc.ec.europa.eu/apps/effis.current-situation/active-fires |
+| Eye on the Fire API | https://eyeonthefire.com/data-sources |
+| Ambee Fire API | https://www.getambee.com/api/fire |
+| Generalitat Fire Data | https://agricultura.gencat.cat/ca/ambits/medi-natural/incendis-forestals/ |
+| Generalitat Fire Perimeters (CSV) | https://analisi.transparenciacatalunya.cat/api/views/bks7-dkfd/rows.csv?accessType=DOWNLOAD |
+| Generalitat Civil Protection Risk Map | https://datos.gob.es/en/catalogo/a09002970-mapa-de-proteccion-civil-de-cataluna-riesgo-de-incendios-forestales |
+| ICGC CatLC Dataset | https://www.icgc.cat/en/Geoinformation-and-Maps/Maps/Dataset-Land-cover-map-CatLC |
+| ICGC CatLC FTP Download | https://ftp.icgc.cat/descarregues/CatLCNet |
+| PREVINCAT Server | https://previncat.ctfc.cat/en/index.html |
+| PREVINCAT MDPI Paper | https://www.mdpi.com/2072-4292/12/24/4124 (Note: May require direct browser access) |
+| Copernicus EMS Catalonia Fire (2022) | https://data.jrc.ec.europa.eu/dataset/7d5a5041-efac-4762-b9d1-c0b290ab2ce7 |
+| WUI Map Catalonia | https://pdxscholar.library.pdx.edu/esm_fac/215/ |
+| Fire Sondes Data (Catalonia) | https://zenodo.org/records/6424854 |
+
+#### Python Libraries & Tools
+
+**Core ML Libraries:**
+| Library | Purpose | PyPI | GitHub | Documentation |
+|---------|---------|------|--------|---------------|
+| PyTorch | Deep learning framework | [pypi.org/project/torch](https://pypi.org/project/torch/) | [github.com/pytorch/pytorch](https://github.com/pytorch/pytorch) | [pytorch.org/docs](https://pytorch.org/docs/) |
+| segmentation_models_pytorch | U-Net segmentation with pretrained encoders | [pypi.org/project/segmentation-models-pytorch](https://pypi.org/project/segmentation-models-pytorch/) | [github.com/qubvel/segmentation_models.pytorch](https://github.com/qubvel/segmentation_models.pytorch) | [smp.readthedocs.io](https://smp.readthedocs.io/) |
+| Weights & Biases (wandb) | Experiment tracking and MLOps | [pypi.org/project/wandb](https://pypi.org/project/wandb/) | [github.com/wandb/wandb](https://github.com/wandb/wandb) | [docs.wandb.ai](https://docs.wandb.ai/) |
+| Optuna | Hyperparameter optimization | [pypi.org/project/optuna](https://pypi.org/project/optuna/) | [github.com/optuna/optuna](https://github.com/optuna/optuna) | [optuna.readthedocs.io](https://optuna.readthedocs.io/) |
+
+**Geospatial Libraries:**
+| Library | Purpose | PyPI | GitHub | Documentation |
+|---------|---------|------|--------|---------------|
+| rasterio | Geospatial raster I/O | [pypi.org/project/rasterio](https://pypi.org/project/rasterio/) | [github.com/rasterio/rasterio](https://github.com/rasterio/rasterio) | [rasterio.readthedocs.io](https://rasterio.readthedocs.io/) |
+| geopandas | Geospatial vector data operations | [pypi.org/project/geopandas](https://pypi.org/project/geopandas/) | [github.com/geopandas/geopandas](https://github.com/geopandas/geopandas) | [geopandas.org](https://geopandas.org/) |
+| sentinelsat | Search and download Sentinel-2 products | [pypi.org/project/sentinelsat](https://pypi.org/project/sentinelsat/) | [github.com/sentinelsat/sentinelsat](https://github.com/sentinelsat/sentinelsat) | [sentinelsat.readthedocs.io](https://sentinelsat.readthedocs.io/) |
+| pystac-client | STAC API client for Sentinel-2 data | [pypi.org/project/pystac-client](https://pypi.org/project/pystac-client/) | [github.com/stac-utils/pystac-client](https://github.com/stac-utils/pystac-client) | [pystac-client.readthedocs.io](https://pystac-client.readthedocs.io/) |
+| odc-stac | Open Data Cube integration with STAC | [pypi.org/project/odc-stac](https://pypi.org/project/odc-stac/) | [github.com/opendatacube/odc-stac](https://github.com/opendatacube/odc-stac) | [datacube-core.readthedocs.io](https://datacube-core.readthedocs.io/) |
+| sentinelhub | High-level API for on-demand processing | [pypi.org/project/sentinelhub](https://pypi.org/project/sentinelhub/) | [github.com/sentinel-hub/sentinelhub-py](https://github.com/sentinel-hub/sentinelhub-py) | [sentinelhub-py.readthedocs.io](https://sentinelhub-py.readthedocs.io/) |
+| folium | Interactive maps for Python | [pypi.org/project/folium](https://pypi.org/project/folium/) | [github.com/python-visualization/folium](https://github.com/python-visualization/folium) | [python-visualization.github.io/folium](https://python-visualization.github.io/folium/) |
+
+**Application Libraries:**
+| Library | Purpose | PyPI | GitHub | Documentation |
+|---------|---------|------|--------|---------------|
+| FastAPI | API framework (optional) | [pypi.org/project/fastapi](https://pypi.org/project/fastapi/) | [github.com/tiangolo/fastapi](https://github.com/tiangolo/fastapi) | [fastapi.tiangolo.com](https://fastapi.tiangolo.com/) |
+| Streamlit | Web app framework | [pypi.org/project/streamlit](https://pypi.org/project/streamlit/) | [github.com/streamlit/streamlit](https://github.com/streamlit/streamlit) | [docs.streamlit.io](https://docs.streamlit.io/) |
+
+**Data & Utility Libraries:**
+| Library | Purpose | PyPI | GitHub | Documentation |
+|---------|---------|------|--------|---------------|
+| DVC | Data Version Control | [pypi.org/project/dvc](https://pypi.org/project/dvc/) | [github.com/iterative/dvc](https://github.com/iterative/dvc) | [dvc.org/doc](https://dvc.org/doc/) |
+| numpy | Numerical computing | [pypi.org/project/numpy](https://pypi.org/project/numpy/) | [github.com/numpy/numpy](https://github.com/numpy/numpy) | [numpy.org/doc](https://numpy.org/doc/) |
+| matplotlib | Plotting and visualization | [pypi.org/project/matplotlib](https://pypi.org/project/matplotlib/) | [github.com/matplotlib/matplotlib](https://github.com/matplotlib/matplotlib) | [matplotlib.org](https://matplotlib.org/) |
+| scipy | Scientific computing (for image processing) | [pypi.org/project/scipy](https://pypi.org/project/scipy/) | [github.com/scipy/scipy](https://github.com/scipy/scipy) | [docs.scipy.org](https://docs.scipy.org/) |
+
+### B. Technology Stack Summary
+
+| Layer | Technology | Notes |
+|-------|------------|-------|
+| **ML Framework** | PyTorch | Deep learning framework |
+| **Segmentation** | segmentation_models_pytorch | U-Net with pretrained encoders (ResNet-34 or EfficientNet-B0) |
+| **Experiment Tracking** | Weights & Biases (W&B) | Mandatory for training runs and hyperparameter tracking |
+| **Data Versioning** | Cloud storage + Git documentation | Store processed data in cloud (Drive/Dropbox/GCP), document in `data/README.md` |
+| **Hyperparameter Tuning** | Optuna | 20-50 trials recommended |
+| **Geospatial Data** | rasterio, geopandas | Raster and vector data processing |
+| **Sentinel-2 Access** | sentinelsat, pystac-client, odc-stac | Copernicus Data Space API access |
+| **API** | Optional (see `optional_api_design.md`) | Not required - Streamlit loads model directly |
+| **Frontend** | Streamlit (recommended) | Simplified UI for capstone |
+| **Maps** | Folium | Interactive maps in Streamlit |
+| **Database** | SQLite or skip | Optional for simple demo |
+| **Deployment** | GCP Cloud Run (recommended) | Serverless deployment using university credits |
+| **Model Format** | PyTorch (.pt) | Standard PyTorch checkpoint format |
+
+### C. Glossary
+
+| Term | Definition |
+|------|------------|
+| **IoU** | Intersection over Union — primary segmentation overlap metric (target: ≥0.70) |
+| **Dice Score** | Harmonic mean of precision and recall (target: ≥0.80) |
+| **SWIR** | Short-Wave Infrared — spectral bands (B11, B12) critical for fire detection |
+| **NBR** | Normalized Burn Ratio — index for burn scar detection: (B8 - B12) / (B8 + B12) |
+| **NDVI** | Normalized Difference Vegetation Index — vegetation health: (B8 - B4) / (B8 + B4) |
+| **BAI** | Burned Area Index — active fire enhancement index |
+| **L2A** | Level-2A — atmospherically corrected Sentinel-2 product (recommended) |
+| **GeoJSON** | Standard JSON format for geographic data (polygons, coordinates) |
+| **WGS84** | World Geodetic System 1984 — standard web coordinate system (EPSG:4326) |
+| **UTM Zone 31N** | Universal Transverse Mercator — projected coordinate system for Catalonia (EPSG:32631) |
+| **DVC** | Data Version Control — tool for ML data versioning (not required for this project) |
+| **Git LFS** | Git Large File Storage — optional for small files, not required (use cloud storage instead) |
+| **W&B** | Weights & Biases — experiment tracking platform (mandatory for this project) |
+| **Optuna** | Hyperparameter optimization framework |
+| **U-Net** | Encoder-decoder segmentation architecture with skip connections |
+| **ResNet-34** | Recommended encoder for U-Net (21M parameters, balanced performance) |
+| **EfficientNet-B0** | Alternative encoder for U-Net (5M parameters, more efficient) |
+| **BCE + Dice Loss** | Combined loss function (0.5:0.5 weight) for class imbalance |
+| **AdamW** | Optimizer with weight decay (recommended learning rate: 1e-4 to 3e-4) |
+| **ReduceLROnPlateau** | Learning rate schedule that reduces LR when validation plateaus |
+| **Catalonia Validation Set** | Mandatory validation set created from Generalitat fire perimeters (2023-2024) |
+| **HuggingFace Spaces** | Recommended deployment platform (free hosting for ML demos) |
+
+### D. ML Documentation Deliverables
+
+**Required Documentation for Grading:**
+
+1. **Model Card:** Performance metrics, limitations, intended use, training data summary
+2. **Training Report:** Hyperparameters, training curves, validation results, best model selection
+3. **Evaluation Report:** Test set results, Catalonia validation results, confusion matrices, error analysis, threshold optimization
+4. **Data Documentation:** Dataset sources, preprocessing steps, train/val/test splits, data quality findings
+5. **Reproducibility Guide:** Environment setup, data access, code execution, how to reproduce results
+6. **Baseline Comparison:** Results of threshold-based and Random Forest baselines vs deep learning model
+
+---
+
+*Document Version: 1.0*
+*Last Updated: January 2026*
