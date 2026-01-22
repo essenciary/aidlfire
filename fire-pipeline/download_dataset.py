@@ -179,6 +179,7 @@ def generate_patches(
     patches_dir: Path,
     mask_type: str = "DEL",
     splits: list[str] | None = None,
+    force: bool = False,
 ):
     """
     Generate patches from the extracted dataset.
@@ -188,11 +189,18 @@ def generate_patches(
         patches_dir: Output directory for patches
         mask_type: DEL or GRA
         splits: Which splits to process
+        force: Regenerate all patches even if they exist
     """
     print(f"\n🔧 Generating patches...")
     print(f"   Dataset: {dataset_dir}")
     print(f"   Output: {patches_dir}")
     print(f"   Mask type: {mask_type}")
+
+    skip_existing = not force
+    if skip_existing:
+        print(f"   Mode: Resume (skipping existing patches)")
+    else:
+        print(f"   Mode: Force (regenerating all)")
 
     # Import here to avoid dependency issues
     try:
@@ -211,6 +219,7 @@ def generate_patches(
         output_root=patches_dir,
         mask_type=mask_type,
         splits=splits or ["train", "val", "test"],
+        skip_existing=skip_existing,
     )
 
     print(f"\n✅ Patches generated at: {patches_dir}")
@@ -275,6 +284,11 @@ Examples:
         action="store_true",
         help="Skip download (use existing data)",
     )
+    parser.add_argument(
+        "--force-patches",
+        action="store_true",
+        help="Regenerate all patches even if they exist (default: resume)",
+    )
 
     args = parser.parse_args()
 
@@ -309,6 +323,7 @@ Examples:
             patches_dir=args.patches_dir,
             mask_type=args.mask_type,
             splits=args.splits,
+            force=args.force_patches,
         )
 
     print("\n" + "=" * 60)

@@ -43,17 +43,24 @@ uv sync --extra all      # Everything included
 # 1. Install training dependencies
 uv sync --extra train
 
-# 2. Download data & generate patches (~30-60 min depending on connection)
-uv run python download_dataset.py --generate-patches --patches-dir ./patches
+# 2. Download data (can be interrupted and resumed)
+uv run python download_dataset.py --output-dir ../wildfires-cems
 
-# 3. (Optional) Analyze class distribution
+# 3. Generate patches (can be interrupted and resumed)
+uv run python run_pipeline.py \
+    --dataset-dir ../wildfires-cems \
+    --output-dir ./patches
+
+# 4. (Optional) Analyze class distribution
 uv run python analyze_patches.py ./patches
 
-# 4. Train the model
+# 5. Train the model
 uv run python train.py --patches-dir ./patches --num-classes 2 --epochs 50
 
 # Model saved to: ./output/checkpoints/best_model.pt
 ```
+
+**Both download and patch generation support resume**: If interrupted, just re-run the same command and it will skip already-completed work. Use `--force` to regenerate everything.
 
 ### Run the Web App
 
@@ -248,33 +255,51 @@ git lfs install
 
 ## Downloading the Data
 
-### Option 1: Automated Download (Recommended for Cloud Deployment)
+### Option 1: Automated Download (Recommended)
 
-Use `download_dataset.py` for fully automated download, extraction, and patch generation:
+Use `download_dataset.py` for automated download with resume support:
 
 ```bash
 # Install download dependencies
-uv add huggingface_hub
-# Or: uv sync --extra download
+uv sync --extra download
 
-# Download and extract everything
-uv run python download_dataset.py
+# Step 1: Download and extract (can be interrupted and resumed)
+uv run python download_dataset.py --output-dir ../wildfires-cems
 
-# Full pipeline: download, extract, and generate patches in one command
-uv run python download_dataset.py --generate-patches --patches-dir ./patches
+# Step 2: Generate patches separately (can be interrupted and resumed)
+uv run python run_pipeline.py \
+    --dataset-dir ../wildfires-cems \
+    --output-dir ./patches
 
-# Download to specific location
-uv run python download_dataset.py --output-dir /data/wildfires-cems
-
-# Download only training data (faster for testing)
-uv run python download_dataset.py --splits train
+# OR: Do everything in one command (still resumable)
+uv run python download_dataset.py \
+    --output-dir ../wildfires-cems \
+    --generate-patches \
+    --patches-dir ./patches
 ```
 
-**Features:**
-- Progress bars with resume support
-- Handles Git LFS files automatically
-- Extracts archives after download
-- Optional patch generation in same command
+**Resume Support:**
+- **Download**: Automatically resumes interrupted downloads (via huggingface_hub)
+- **Extraction**: Skips already-extracted splits (checks for EMSR* folders)
+- **Patches**: Skips already-generated patches (checks for existing .npy files)
+
+If you want to regenerate everything from scratch:
+```bash
+# Force regenerate all patches
+uv run python run_pipeline.py --force ...
+
+# Or with download_dataset.py
+uv run python download_dataset.py --generate-patches --force-patches ...
+```
+
+**Additional options:**
+```bash
+# Download only training data (faster for testing)
+uv run python download_dataset.py --splits train
+
+# Skip extraction if already done
+uv run python download_dataset.py --no-extract
+```
 
 ### Option 2: Manual Git Clone
 
@@ -312,16 +337,18 @@ cd fire-detection/fire-pipeline
 # 2. Install all dependencies
 uv sync --extra all
 
-# 3. Download data and generate patches (~30-60 min)
-uv run python download_dataset.py \
-    --output-dir ./wildfires-cems \
-    --generate-patches \
-    --patches-dir ./patches
+# 3. Download data (~20-40 min, resumable if interrupted)
+uv run python download_dataset.py --output-dir ./wildfires-cems
 
-# 4. Analyze class distribution (optional but recommended)
+# 4. Generate patches (~10-20 min, resumable if interrupted)
+uv run python run_pipeline.py \
+    --dataset-dir ./wildfires-cems \
+    --output-dir ./patches
+
+# 5. Analyze class distribution (optional but recommended)
 uv run python analyze_patches.py ./patches --plot
 
-# 5. Train the model
+# 6. Train the model
 uv run python train.py \
     --patches-dir ./patches \
     --output-dir ./output \
@@ -329,8 +356,10 @@ uv run python train.py \
     --epochs 50 \
     --wandb  # Optional: enable W&B logging
 
-# 6. Model checkpoint saved to: ./output/checkpoints/best_model.pt
+# 7. Model checkpoint saved to: ./output/checkpoints/best_model.pt
 ```
+
+**Note:** Both download and patch generation support resume. If interrupted (e.g., VM preemption), re-run the same command and it will continue from where it left off.
 
 #### Option B: Run App with Pre-trained Model
 

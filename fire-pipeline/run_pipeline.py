@@ -91,6 +91,11 @@ def main():
         default=0.5,
         help="Maximum cloud cover fraction (0-1)",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Regenerate all patches, even if they already exist (default: resume)",
+    )
 
     args = parser.parse_args()
 
@@ -136,11 +141,18 @@ def main():
     config = PatchConfig(max_cloud_cover=args.max_cloud_cover)
     generator = PatchGenerator(config)
 
+    skip_existing = not args.force
+    if skip_existing:
+        print("  Resume mode: Skipping patches that already exist")
+    else:
+        print("  Force mode: Regenerating all patches")
+
     metadata = generator.process_dataset(
         data_root,
         args.output_dir,
         args.mask_type,
         args.splits,
+        skip_existing=skip_existing,
     )
 
     # Summary

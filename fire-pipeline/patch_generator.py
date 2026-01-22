@@ -179,6 +179,7 @@ class PatchGenerator:
         output_dir: Path,
         mask_type: Literal["DEL", "GRA"] = "DEL",
         mode: Literal["train", "inference"] = "train",
+        skip_existing: bool = True,
     ) -> list[PatchMetadata]:
         """Process a single image directory and extract patches.
 
@@ -187,6 +188,7 @@ class PatchGenerator:
             output_dir: Directory to save patches
             mask_type: "DEL" for binary or "GRA" for severity
             mode: "train" (50% overlap) or "inference" (no overlap)
+            skip_existing: Skip patches that already exist (for resume support)
 
         Returns:
             List of metadata for extracted patches
@@ -222,15 +224,25 @@ class PatchGenerator:
 
         # Extract and save patches
         metadata_list = []
+        skipped_count = 0
         for img_patch, mask_patch, metadata in self._extract_patches(
             image, mask, cloud_mask, stride, base_name, transform
         ):
+            image_path = output_dir / f"{metadata.patch_id}_image.npy"
+            mask_path = output_dir / f"{metadata.patch_id}_mask.npy"
+
+            # Skip if both files already exist (resume support)
+            if skip_existing and image_path.exists() and mask_path.exists():
+                skipped_count += 1
+                metadata_list.append(metadata)
+                continue
+
             # Save patches
-            np.save(output_dir / f"{metadata.patch_id}_image.npy", img_patch)
-            np.save(output_dir / f"{metadata.patch_id}_mask.npy", mask_patch)
+            np.save(image_path, img_patch)
+            np.save(mask_path, mask_patch)
             metadata_list.append(metadata)
 
-        return metadata_list
+        return metadata_list, skipped_count
 
     def process_dataset(
         self,
@@ -238,6 +250,7 @@ class PatchGenerator:
         output_root: Path,
         mask_type: Literal["DEL", "GRA"] = "DEL",
         splits: list[str] = None,
+        skip_existing: bool = True,
     ) -> dict[str, list[PatchMetadata]]:
         """Process entire dataset (train/val/test splits).
 
@@ -246,6 +259,7 @@ class PatchGenerator:
             output_root: Root directory for output patches
             mask_type: "DEL" for binary or "GRA" for severity
             splits: List of splits to process (default: ["train", "val", "test"])
+            skip_existing: Skip patches that already exist (for resume support)
 
         Returns:
             Dictionary mapping split names to lists of metadata
@@ -263,6 +277,7 @@ class PatchGenerator:
             mode = "inference" if split == "test" else "train"
             output_split_dir = output_root / split
             split_metadata = []
+            total_skipped = 0
 
             # Find all image directories (EMSR*/AOI*/EMSR*_AOI*_*)
             image_dirs = list(split_dir.glob("EMSR*/AOI*/EMSR*_AOI*_*"))
@@ -273,17 +288,25 @@ class PatchGenerator:
 
                 print(f"  [{i+1}/{len(image_dirs)}] {image_dir.name}", end="")
 
-                metadata = self.process_image(
-                    image_dir, output_split_dir, mask_type, mode
+                metadata, skipped = self.process_image(
+                    image_dir, output_split_dir, mask_type, mode, skip_existing
                 )
                 split_metadata.extend(metadata)
-                print(f" -> {len(metadata)} patches")
+                total_skipped += skipped
+
+                if skipped > 0:
+                    print(f" -> {len(metadata)} patches ({skipped} skipped)")
+                else:
+                    print(f" -> {len(metadata)} patches")
 
             all_metadata[split] = split_metadata
 
             # Save metadata CSV
             self._save_metadata_csv(split_metadata, output_split_dir / "metadata.csv")
-            print(f"  Total {split} patches: {len(split_metadata)}")
+            if total_skipped > 0:
+                print(f"  Total {split} patches: {len(split_metadata)} ({total_skipped} already existed)")
+            else:
+                print(f"  Total {split} patches: {len(split_metadata)}")
 
         return all_metadata
 
@@ -357,6 +380,11 @@ def main():
         default=0.5,
         help="Maximum cloud cover fraction (0-1)",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Regenerate all patches, even if they already exist",
+    )
 
     args = parser.parse_args()
 
@@ -370,11 +398,18 @@ def main():
 
     # Process dataset
     generator = PatchGenerator(config)
+    skip_existing = not args.force
+    if skip_existing:
+        print("Resume mode: Skipping patches that already exist")
+    else:
+        print("Force mode: Regenerating all patches")
+
     metadata = generator.process_dataset(
         args.dataset_root,
         args.output_root,
         args.mask_type,
         args.splits,
+        skip_existing=skip_existing,
     )
 
     # Print summary
