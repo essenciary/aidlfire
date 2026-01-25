@@ -26,6 +26,7 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
+from metric_logger import MetricLogger
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -245,6 +246,8 @@ def train(
     output_dir.mkdir(parents=True, exist_ok=True)
     checkpoints_dir = output_dir / "checkpoints"
     checkpoints_dir.mkdir(exist_ok=True)
+    metric_logger = MetricLogger(output_dir=output_dir)
+
 
     # Setup device using shared utility
     device = get_device(device)
@@ -409,6 +412,10 @@ def train(
         print(f"  Val Fire IoU: {val_results['fire_iou']:.4f}")
         print(f"  Val Fire Recall: {val_results['fire_recall']:.4f}")
         print(f"  Val Detection F1: {val_results['detection_f1']:.4f}")
+
+        metric_logger.log(epoch, "train", train_results)
+        metric_logger.log(epoch, "val", val_results)
+
 
         # W&B logging
         if wandb:
