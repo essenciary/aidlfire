@@ -39,6 +39,8 @@ from model import FireSegmentationModel, CombinedLoss, ENCODER_OPTIONS
 from metrics import CombinedMetrics
 from constants import get_device, get_class_names
 
+from ray import tune
+
 
 def setup_wandb(config: dict, project: str, run_name: str | None = None):
     """Initialize Weights & Biases logging."""
@@ -467,6 +469,39 @@ def train(
     return best_metric
 
 
+def tune_trainable(config, fixed):
+    """
+    Minimal Ray Tune trainable: call existing train() once per trial
+    and report final best_metric.
+    """
+    best_metric = train(
+        patches_dir=fixed["patches_dir"],
+        output_dir=fixed["output_dir"] / f"trial_{tune.get_trial_id()}",
+        num_classes=fixed["num_classes"],
+        encoder_name=fixed["encoder_name"],
+        architecture=fixed["architecture"],
+        batch_size=config.get("batch_size", fixed["batch_size"]),
+        num_epochs=fixed["num_epochs"],
+        learning_rate=config.get("learning_rate", fixed["learning_rate"]),
+        weight_decay=config.get("weight_decay", fixed["weight_decay"]),
+        use_class_weights=fixed["use_class_weights"],
+        use_focal_loss=fixed["use_focal_loss"],
+        focal_gamma=config.get("focal_gamma", fixed["focal_gamma"]),
+        use_weighted_sampling=fixed["use_weighted_sampling"],
+        fire_sample_weight=fixed["fire_sample_weight"],
+        use_fire_augment=fixed["use_fire_augment"],
+        num_workers=fixed["num_workers"],
+        device=fixed["device"],
+        resume=None,
+        wandb_project=None,
+        wandb_run_name=None,
+        early_stopping_patience=fixed["early_stopping_patience"],
+        save_every=fixed["save_every"],
+    )
+
+    tune.report(fire_iou=best_metric)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Train fire detection/segmentation model",
@@ -547,13 +582,121 @@ def main():
     parser.add_argument("--project", type=str, default="fire-detection", help="W&B project name")
     parser.add_argument("--run-name", type=str, default=None, help="W&B run name")
 
+    # Hyperparameter tuning arguments
+    parser.add_argument(
+        "--tune",
+        type=str,
+        default="false",
+        choices=["true", "false"],
+        help="Run hyperparameter tuning with Ray Tune",
+    )
+    parser.add_argument(
+        "--tune-samples",
+        type=int,
+        default=20,
+        help="Number of Ray Tune trials to run",
+    )
+    parser.add_argument(
+        "--tune-mode",
+        type=str,
+        default="random",
+        choices=["random", "grid"],
+        help="Tuning strategy: random search or small grid",
+    )
+
     args = parser.parse_args()
     train_all_encoders = args.all_encoders == "true"
     encoders_to_train = (
         ENCODER_OPTIONS if train_all_encoders else [args.encoder]
     )
 
-    # Run training
+    # Hyperparameter tuning
+    if args.tune == "true":
+        # Build the search space once
+        if args.tune_mode == "grid":
+            search_space = {
+                "learning_rate": tune.grid_search([5e-5, 1e-4, 2e-4]),
+                "weight_decay": tune.grid_search([1e-5, 1e-4]),
+            }
+        else:
+            search_space = {
+                "learning_rate": tune.loguniform(5e-5, 5e-4),
+                "weight_decay": tune.loguniform(1e-6, 1e-3),
+            }
+            if args.focal_loss:
+                search_space["focal_gamma"] = tune.choice([1.5, 2.0, 2.5])
+
+        # We'll store best results per encoder here
+        best_per_encoder = {}
+
+        # If --all-encoders true -> tune each encoder separately
+        tune_encoders = ENCODER_OPTIONS if train_all_encoders else [args.encoder]
+
+        for encoder in tune_encoders:
+            fixed = {
+                "patches_dir": args.patches_dir,
+                "output_dir": (args.output_dir / f"encoder_{encoder}" / "tune"),
+                "num_classes": args.num_classes,
+                "encoder_name": encoder,
+                "architecture": args.architecture,
+                "batch_size": args.batch_size,
+                "num_epochs": args.epochs,
+                "learning_rate": args.lr,
+                "weight_decay": args.weight_decay,
+                "use_class_weights": not args.no_class_weights,
+                "use_focal_loss": args.focal_loss,
+                "focal_gamma": args.focal_gamma,
+                "use_weighted_sampling": args.weighted_sampling,
+                "fire_sample_weight": args.fire_weight,
+                "use_fire_augment": not args.no_fire_augment,
+                "num_workers": args.num_workers,
+                "device": args.device,
+                "early_stopping_patience": args.patience,
+                "save_every": args.save_every,
+            }
+
+            fixed["output_dir"].mkdir(parents=True, exist_ok=True)
+
+            print(f"\n\n{'#' * 80}")
+            print(f"TUNING ENCODER: {encoder}")
+            print(f"OUTPUT DIR: {fixed['output_dir']}")
+            print(f"{'#' * 80}\n")
+
+            tuner = tune.Tuner(
+                tune.with_parameters(tune_trainable, fixed=fixed),
+                param_space=search_space,
+                tune_config=tune.TuneConfig(
+                    metric="fire_iou",
+                    mode="max",
+                    num_samples=args.tune_samples if args.tune_mode == "random" else 1,
+                ),
+                run_config=tune.RunConfig(
+                    name=f"tune_{encoder}",
+                    local_dir=str(fixed["output_dir"]),
+                ),
+            )
+
+            results = tuner.fit()
+            best = results.get_best_result(metric="fire_iou", mode="max")
+
+            best_per_encoder[encoder] = {
+                "best_fire_iou": float(best.metrics["fire_iou"]),
+                "best_config": best.config,
+            }
+
+            print("\nBest hyperparameters:", best.config)
+            print("Best Fire IoU:", best.metrics["fire_iou"])
+
+        # Save a global summary JSON
+        summary_path = args.output_dir / "tune_encoder_summary.json"
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+        with open(summary_path, "w") as f:
+            json.dump(best_per_encoder, f, indent=2)
+
+        print("\nSaved tuning summary to:", summary_path)
+        return
+    else:
+    # Run training without Hyperparameter tuning
     wandb_project = args.project if args.wandb else None
     results = {}
 
@@ -567,10 +710,10 @@ def main():
         print(f"OUTPUT DIR: {encoder_output_dir}")
         print(f"{'#' * 80}\n")
 
-        
+
         best_metric = train(
             patches_dir=args.patches_dir,
-            output_dir=args.output_dir,
+            output_dir=encoder_output_dir,
             num_classes=args.num_classes,
             encoder_name=encoder,
             architecture=args.architecture,
