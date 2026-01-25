@@ -35,7 +35,7 @@ from dataset import (
     get_training_augmentation,
     get_strong_augmentation,
 )
-from model import FireSegmentationModel, CombinedLoss
+from model import FireSegmentationModel, CombinedLoss, ENCODER_OPTIONS
 from metrics import CombinedMetrics
 from constants import get_device, get_class_names
 
@@ -503,6 +503,13 @@ def main():
         help="Encoder backbone",
     )
     parser.add_argument(
+        "--all-encoders",
+        type=str,
+        default="false",
+        choices=["true", "false"],
+        help="Train all encoders instead of a single encoder",
+)
+    parser.add_argument(
         "--architecture",
         type=str,
         default="unet",
@@ -541,33 +548,52 @@ def main():
     parser.add_argument("--run-name", type=str, default=None, help="W&B run name")
 
     args = parser.parse_args()
-
-    # Run training
-    train(
-        patches_dir=args.patches_dir,
-        output_dir=args.output_dir,
-        num_classes=args.num_classes,
-        encoder_name=args.encoder,
-        architecture=args.architecture,
-        batch_size=args.batch_size,
-        num_epochs=args.epochs,
-        learning_rate=args.lr,
-        weight_decay=args.weight_decay,
-        use_class_weights=not args.no_class_weights,
-        use_focal_loss=args.focal_loss,
-        focal_gamma=args.focal_gamma,
-        use_weighted_sampling=args.weighted_sampling,
-        fire_sample_weight=args.fire_weight,
-        use_fire_augment=not args.no_fire_augment,
-        num_workers=args.num_workers,
-        device=args.device,
-        resume=args.resume,
-        wandb_project=args.project if args.wandb else None,
-        wandb_run_name=args.run_name,
-        early_stopping_patience=args.patience,
-        save_every=args.save_every,
+    train_all_encoders = args.all_encoders == "true"
+    encoders_to_train = (
+        ENCODER_OPTIONS if train_all_encoders else [args.encoder]
     )
 
+    # Run training
+    wandb_project = args.project if args.wandb else None
+    results = {}
+
+    for encoder in encoders_to_train:
+        encoder_output_dir = args.output_dir / f"encoder_{encoder}"
+
+        run_name = args.run_name or f"{encoder}-{args.architecture}-c{args.num_classes}"
+
+        print(f"\n\n{'#' * 80}")
+        print(f"TRAINING ENCODER: {encoder}")
+        print(f"OUTPUT DIR: {encoder_output_dir}")
+        print(f"{'#' * 80}\n")
+
+        
+        best_metric = train(
+            patches_dir=args.patches_dir,
+            output_dir=args.output_dir,
+            num_classes=args.num_classes,
+            encoder_name=encoder,
+            architecture=args.architecture,
+            batch_size=args.batch_size,
+            num_epochs=args.epochs,
+            learning_rate=args.lr,
+            weight_decay=args.weight_decay,
+            use_class_weights=not args.no_class_weights,
+            use_focal_loss=args.focal_loss,
+            focal_gamma=args.focal_gamma,
+            use_weighted_sampling=args.weighted_sampling,
+            fire_sample_weight=args.fire_weight,
+            use_fire_augment=not args.no_fire_augment,
+            num_workers=args.num_workers,
+            device=args.device,
+            resume=None if train_all_encoders else args.resume,
+            wandb_project=wandb_project,
+            wandb_run_name=run_name,
+            early_stopping_patience=args.patience,
+            save_every=args.save_every,
+        )
+
+        results[encoder] = best_metric
 
 if __name__ == "__main__":
     main()
