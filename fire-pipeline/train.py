@@ -37,7 +37,7 @@ from dataset import (
 )
 from model import FireSegmentationModel, CombinedLoss
 from metrics import CombinedMetrics
-from constants import get_device, get_class_names
+from constants import get_device, get_device_name, get_class_names
 
 
 def setup_wandb(config: dict, project: str, run_name: str | None = None):
@@ -248,11 +248,14 @@ def train(
 
     # Setup device using shared utility
     device = get_device(device)
+    device_label = get_device_name(device)
 
     print(f"\n{'='*60}")
     print(f"  FIRE DETECTION TRAINING")
     print(f"{'='*60}")
-    print(f"  Device: {device}")
+    print(f"  Device: {device_label}")
+    if device.type == "cpu":
+        print(f"  (Tip: use --device cuda if you have a GPU; install PyTorch with CUDA for GPU training)")
     print(f"  Patches: {patches_dir}")
     print(f"  Output: {output_dir}")
     print(f"  Classes: {num_classes}")
@@ -364,7 +367,6 @@ def train(
         mode="max",
         factor=0.5,
         patience=5,
-        verbose=True,
     )
 
     # Resume from checkpoint

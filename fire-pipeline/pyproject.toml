@@ -54,6 +54,16 @@ test = [
     "segmentation-models-pytorch>=0.3.0",
 ]
 
+# PyTorch CUDA: use CUDA wheels on Linux, PyPI (CPU) elsewhere
+[[tool.uv.index]]
+name = "pytorch-cuda"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[tool.uv.sources]
+# Use CUDA build on Linux; other platforms get torch from default index (CPU builds)
+torch = { index = "pytorch-cuda", marker = "sys_platform == 'linux'" }
+
 [project.scripts]
 generate-patches = "patch_generator:main"
 run-pipeline = "run_pipeline:main"
