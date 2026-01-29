@@ -45,7 +45,6 @@ from dataset import (
 from model import FireSegmentationModel, CombinedLoss, ENCODER_OPTIONS
 from metrics import CombinedMetrics
 from constants import get_device, get_class_names
-from yolo_runner import train_yolo_seg, YoloCfg
 
 from ray import tune
 
@@ -560,12 +559,12 @@ def main():
         help="Segmentation architecture",
     )
 
-    # YOLO baseline arguments
+    # YOLO detection baseline arguments
     parser.add_argument(
         "--include-yolo",
         action="store_true",
-        help="Also train YOLOv8-Seg RGB baseline after main training",
-    )
+        help="Also train YOLOv8 DETECTION baseline using 7-channel multispectral data",
+)
 
     # Training arguments
     parser.add_argument("--batch-size", type=int, default=16, help="Batch size")
@@ -711,9 +710,9 @@ def main():
         print("\nSaved tuning summary to:", summary_path)
         return
     else:
-    # Run training without Hyperparameter tuning
-    wandb_project = args.project if args.wandb else None
-    results = {}
+        # Run training without Hyperparameter tuning
+        wandb_project = args.project if args.wandb else None
+        results = {}
 
     # Runing bag of models
     # SMP models
@@ -756,28 +755,35 @@ def main():
 
         results[encoder] = best_metric
 
-    # YOLOv8-Seg RGB BASELINE
+    # YOLOv8 DETECTION (7-CHANNEL) baseline
     if args.include_yolo:
-        from yolo_runner import train_yolo_seg, YoloCfg
+        from yolo_dataset_exporter import export_yolo_det7_dataset, ExportDet7Cfg
+        from yolo_runner import YoloDetTrainCfg
 
         print("\n" + "#" * 80)
-        print("TRAINING YOLOv8-SEG RGB BASELINE")
+        print("TRAINING YOLOv8 DETECTION (7-CHANNEL)")
         print("#" * 80 + "\n")
 
-        yolo_metrics = train_yolo_seg(
+        metrics = export_yolo_det7_dataset(
             patches_dir=args.patches_dir,
-            output_dir=args.output_dir / "yolo_seg",
+            export_root=args.output_dir / "yolo_det_7ch",
             num_classes=args.num_classes,
-            cfg=YoloCfg(
-                epochs=args.epochs,
+            export_cfg=ExportDet7Cfg(
+                channels=7,
+                mask_to_boxes_mode="components",
+                min_box_area_px=10,
+            ),
+            train_cfg=YoloDetTrainCfg(
+                imgsz=512,
                 batch=args.batch_size,
-                device=args.yolo_device,
-                rgb_channels=(0, 1, 2),  # update if needed
+                epochs=args.epochs,
+                device="0", 
+                model_weights="yolov8n.pt",
             ),
             num_workers=args.num_workers,
         )
 
-        print("YOLO validation metrics:", yolo_metrics.get("val_results"))
+        print("YOLO validation metrics:", metrics.get("val_results"))
 
 
 if __name__ == "__main__":
