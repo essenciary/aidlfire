@@ -28,6 +28,7 @@ import torch
 import torch.nn as nn
 from metric_logger import MetricLogger
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from dataset import (
@@ -54,6 +55,13 @@ def setup_wandb(config: dict, project: str, run_name: str | None = None):
     except ImportError:
         print("Warning: wandb not installed. Install with: pip install wandb")
         return None
+
+
+def setup_tensorboard(output_dir: Path) -> SummaryWriter:
+    """Initialize TensorBoard logging."""
+    log_dir = output_dir / "tensorboard"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return SummaryWriter(log_dir=str(log_dir))
 
 
 def save_checkpoint(
@@ -211,6 +219,7 @@ def train(
     resume: Path | None = None,
     wandb_project: str | None = None,
     wandb_run_name: str | None = None,
+    use_tensorboard: bool = True,
     early_stopping_patience: int = 10,
     save_every: int = 5,
 ):
@@ -238,6 +247,7 @@ def train(
         resume: Path to checkpoint to resume from
         wandb_project: W&B project name for logging
         wandb_run_name: W&B run name
+        use_tensorboard: Enable TensorBoard logging
         early_stopping_patience: Epochs without improvement before stopping
         save_every: Save checkpoint every N epochs
     """
@@ -293,6 +303,13 @@ def train(
     wandb = None
     if wandb_project:
         wandb = setup_wandb(config, wandb_project, wandb_run_name)
+
+    # Setup TensorBoard
+    writer = None
+    if use_tensorboard:
+        writer = setup_tensorboard(output_dir)
+        print(f"\nTensorBoard logging enabled: {output_dir / 'tensorboard'}")
+        print(f"  View with: tensorboard --logdir={output_dir / 'tensorboard'}")
 
     # Compute class weights
     class_weights = None
@@ -416,6 +433,27 @@ def train(
         metric_logger.log(epoch, "train", train_results)
         metric_logger.log(epoch, "val", val_results)
 
+        # TensorBoard logging
+        if writer:
+            # Training metrics
+            writer.add_scalar("train/loss", train_results["loss"], epoch)
+            writer.add_scalar("train/fire_iou", train_results["fire_iou"], epoch)
+            writer.add_scalar("train/detection_f1", train_results["detection_f1"], epoch)
+            
+            # Validation metrics
+            writer.add_scalar("val/loss", val_results["loss"], epoch)
+            writer.add_scalar("val/fire_iou", val_results["fire_iou"], epoch)
+            writer.add_scalar("val/fire_recall", val_results["fire_recall"], epoch)
+            writer.add_scalar("val/detection_f1", val_results["detection_f1"], epoch)
+            
+            # Learning rate
+            writer.add_scalar("lr", optimizer.param_groups[0]["lr"], epoch)
+            
+            # Loss components if available
+            if "ce_loss" in train_results:
+                writer.add_scalar("train/ce_loss", train_results["ce_loss"], epoch)
+            if "dice_loss" in train_results:
+                writer.add_scalar("train/dice_loss", train_results["dice_loss"], epoch)
 
         # W&B logging
         if wandb:
@@ -467,6 +505,10 @@ def train(
     print("=" * 60)
     print(f"  Best Fire IoU: {best_metric:.4f}")
     print(f"  Checkpoints saved to: {checkpoints_dir}")
+
+    if writer:
+        writer.flush()
+        writer.close()
 
     if wandb:
         wandb.finish()
@@ -546,6 +588,8 @@ def main():
     parser.add_argument("--wandb", action="store_true", help="Enable W&B logging")
     parser.add_argument("--project", type=str, default="fire-detection", help="W&B project name")
     parser.add_argument("--run-name", type=str, default=None, help="W&B run name")
+    parser.add_argument("--tensorboard", action="store_true", default=True, help="Enable TensorBoard logging (default: enabled)")
+    parser.add_argument("--no-tensorboard", action="store_false", dest="tensorboard", help="Disable TensorBoard logging")
 
     args = parser.parse_args()
 
@@ -571,6 +615,7 @@ def main():
         resume=args.resume,
         wandb_project=args.project if args.wandb else None,
         wandb_run_name=args.run_name,
+        use_tensorboard=args.tensorboard,
         early_stopping_patience=args.patience,
         save_every=args.save_every,
     )
