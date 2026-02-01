@@ -239,7 +239,11 @@ def train_scratch_classifier(
     weight_decay: float = 1e-4,
     num_workers: int = 4,
     device: str = "auto",
+    dropout: float = 0.3,
+    pos_weight: float | None = None,
+    report_to_tune: bool = False,
 ):
+
     """
     Minimal training loop for ScratchFireModel (binary classification).
     - Label is derived from mask: y = 1 if any pixel > 0 else 0
@@ -265,10 +269,13 @@ def train_scratch_classifier(
     val_loader = dm.val_dataloader()
 
     # Model
-    model = ScratchFireModel(in_channels=7, dropout=0.3).to(device_t)
+    model = ScratchFireModel(in_channels=7, dropout=dropout).to(device_t)
 
     # Loss + Optim
-    criterion = nn.BCEWithLogitsLoss()
+    if pos_weight is not None:
+        criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight], device=device_t))
+    else:
+        criterion = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
     best_val_loss = float("inf")
@@ -313,6 +320,9 @@ def train_scratch_classifier(
                 n += 1
 
         val_loss /= max(n, 1)
+
+        if report_to_tune:
+            tune.report(val_loss=val_loss, train_loss=train_loss, epoch=epoch)
 
         print(f"\nScratch Epoch {epoch}: train_loss={train_loss:.4f}  val_loss={val_loss:.4f}")
 
@@ -651,6 +661,31 @@ def tune_trainable(config, fixed):
     tune.report(fire_iou=best_metric)
 
 
+def tune_scratch_trainable(config, fixed):
+    """
+    Ray Tune trainable for ScratchFireModel.
+    Reports val_loss (lower is better).
+    """
+    trial_dir = fixed["output_dir"] / f"trial_{tune.get_trial_id()}"
+    trial_dir.mkdir(parents=True, exist_ok=True)
+
+    best_val_loss = train_scratch_classifier(
+        patches_dir=fixed["patches_dir"],
+        output_dir=trial_dir,
+        batch_size=config.get("batch_size", fixed["batch_size"]),
+        num_epochs=fixed["num_epochs"],
+        learning_rate=config.get("learning_rate", fixed["learning_rate"]),
+        weight_decay=config.get("weight_decay", fixed["weight_decay"]),
+        num_workers=fixed["num_workers"],
+        device=fixed["device"],
+        dropout=config.get("dropout", 0.3),
+        pos_weight=config.get("pos_weight", None),
+        report_to_tune=True,
+    )
+
+    tune.report(val_loss=best_val_loss)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Train fire detection/segmentation model",
@@ -766,6 +801,13 @@ def main():
         choices=["random", "grid"],
         help="Tuning strategy: random search or small grid",
     )
+    parser.add_argument(
+    "--tune-target",
+    type=str,
+    default="seg",
+    choices=["seg", "scratch"],
+    help="What to tune: segmentation models (seg) or scratch model (scratch)",
+)
 
     args = parser.parse_args()
     train_all_encoders = args.all_encoders == "true"
@@ -775,7 +817,52 @@ def main():
 
     # Hyperparameter tuning
     if args.tune == "true":
-        # Build the search space once
+        if args.tune_target == "scratch":
+            search_space = {
+                "learning_rate": tune.loguniform(5e-5, 5e-4),
+                "weight_decay": tune.loguniform(1e-6, 1e-3),
+                "dropout": tune.choice([0.1, 0.2, 0.3, 0.4]),
+                # optional imbalance tuning (only useful if you know imbalance is large)
+                # "pos_weight": tune.choice([1.0, 2.0, 5.0, 10.0]),
+                # optional batch tuning:
+                # "batch_size": tune.choice([8, 16, 32]),
+            }
+
+            fixed = {
+                "patches_dir": args.patches_dir,
+                "output_dir": (args.output_dir / "scratch_model" / "tune"),
+                "batch_size": args.batch_size,
+                "num_epochs": args.epochs,
+                "learning_rate": args.lr,
+                "weight_decay": args.weight_decay,
+                "num_workers": args.num_workers,
+                "device": args.device,
+            }
+
+            fixed["output_dir"].mkdir(parents=True, exist_ok=True)
+
+            tuner = tune.Tuner(
+                tune.with_parameters(tune_scratch_trainable, fixed=fixed),
+                param_space=search_space,
+                tune_config=tune.TuneConfig(
+                    metric="val_loss",
+                    mode="min",
+                    num_samples=args.tune_samples if args.tune_mode == "random" else 1,
+                ),
+                run_config=tune.RunConfig(
+                    name="tune_scratch",
+                    local_dir=str(fixed["output_dir"]),
+                ),
+            )
+
+            results = tuner.fit()
+            best = results.get_best_result(metric="val_loss", mode="min")
+
+            print("\nBest scratch hyperparameters:", best.config)
+            print("Best scratch val_loss:", best.metrics["val_loss"])
+            return
+        
+        # Segmentation tuning
         if args.tune_mode == "grid":
             search_space = {
                 "learning_rate": tune.grid_search([5e-5, 1e-4, 2e-4]),
