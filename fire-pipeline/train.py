@@ -33,8 +33,10 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+
 
 from dataset import (
     WildfireDataModule,
@@ -43,6 +45,7 @@ from dataset import (
     get_strong_augmentation,
 )
 from model import FireSegmentationModel, CombinedLoss, ENCODER_OPTIONS
+from scratch_model import ScratchFireModel
 from metrics import CombinedMetrics
 from constants import get_device, get_class_names
 
@@ -196,6 +199,145 @@ def validate_epoch(
     epoch_metrics["loss"] = total_loss / num_batches
 
     return epoch_metrics
+
+def _binary_labels_from_mask(masks: torch.Tensor) -> torch.Tensor:
+    """
+    masks: (B,H,W) int
+    returns y: (B,) float in {0,1} where 1 means "any fire pixel present"
+    """
+    return (masks > 0).any(dim=(1, 2)).float()
+
+
+@torch.no_grad()
+def _binary_metrics_from_logits(logits: torch.Tensor, y: torch.Tensor) -> dict:
+    """
+    logits: (B,) raw logits
+    y: (B,) float {0,1}
+    """
+    probs = torch.sigmoid(logits)
+    pred = (probs >= 0.5).float()
+
+    tp = ((pred == 1) & (y == 1)).sum().item()
+    tn = ((pred == 0) & (y == 0)).sum().item()
+    fp = ((pred == 1) & (y == 0)).sum().item()
+    fn = ((pred == 0) & (y == 1)).sum().item()
+
+    precision = tp / (tp + fp + 1e-9)
+    recall = tp / (tp + fn + 1e-9)
+    f1 = 2 * precision * recall / (precision + recall + 1e-9)
+    acc = (tp + tn) / (tp + tn + fp + fn + 1e-9)
+
+    return {"acc": acc, "precision": precision, "recall": recall, "f1": f1}
+
+
+def train_scratch_classifier(
+    patches_dir: Path,
+    output_dir: Path,
+    batch_size: int = 16,
+    num_epochs: int = 20,
+    learning_rate: float = 1e-4,
+    weight_decay: float = 1e-4,
+    num_workers: int = 4,
+    device: str = "auto",
+):
+    """
+    Minimal training loop for ScratchFireModel (binary classification).
+    - Label is derived from mask: y = 1 if any pixel > 0 else 0
+    - Saves best checkpoint by lowest val loss
+    """
+    output_dir = Path(output_dir)
+    checkpoints_dir = output_dir / "checkpoints"
+    checkpoints_dir.mkdir(parents=True, exist_ok=True)
+
+    device_t = get_device(device)
+
+    # Data
+    dm = WildfireDataModule(
+        patches_root=patches_dir,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        train_augment=get_training_augmentation(),
+        fire_augment=None,
+        use_weighted_sampling=False,
+        fire_sample_weight=1.0,
+    )
+    train_loader = dm.train_dataloader()
+    val_loader = dm.val_dataloader()
+
+    # Model
+    model = ScratchFireModel(in_channels=7, dropout=0.3).to(device_t)
+
+    # Loss + Optim
+    criterion = nn.BCEWithLogitsLoss()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+
+    best_val_loss = float("inf")
+
+    for epoch in range(num_epochs):
+        model.train()
+        train_loss = 0.0
+        n = 0
+
+        for images, masks in tqdm(train_loader, desc=f"Scratch Epoch {epoch} [Train]"):
+            images = images.to(device_t)
+            masks = masks.to(device_t)
+
+            # binary label from mask
+            y = (masks > 0).any(dim=(1, 2)).float()
+
+            optimizer.zero_grad()
+            logits = model(images) 
+            loss = criterion(logits, y)
+            loss.backward()
+            optimizer.step()
+
+            train_loss += loss.item()
+            n += 1
+
+        train_loss /= max(n, 1)
+
+        model.eval()
+        val_loss = 0.0
+        n = 0
+
+        with torch.no_grad():
+            for images, masks in tqdm(val_loader, desc=f"Scratch Epoch {epoch} [Val]"):
+                images = images.to(device_t)
+                masks = masks.to(device_t)
+
+                y = (masks > 0).any(dim=(1, 2)).float()
+                logits = model(images)
+                loss = criterion(logits, y)
+
+                val_loss += loss.item()
+                n += 1
+
+        val_loss /= max(n, 1)
+
+        print(f"\nScratch Epoch {epoch}: train_loss={train_loss:.4f}  val_loss={val_loss:.4f}")
+
+        # Save best checkpoint (lowest val loss)
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            save_checkpoint(
+                model=model,
+                optimizer=optimizer,
+                epoch=epoch,
+                metrics={"val_loss": best_val_loss},
+                path=checkpoints_dir / "best_model.pt",
+                config={
+                    "model": "ScratchFireModel",
+                    "patches_dir": str(patches_dir),
+                    "batch_size": batch_size,
+                    "num_epochs": num_epochs,
+                    "learning_rate": learning_rate,
+                    "weight_decay": weight_decay,
+                    "device": str(device_t),
+                },
+            )
+            print(f"  ✓ Saved best scratch model (val_loss={best_val_loss:.4f})")
+
+    return best_val_loss
 
 
 def train(
@@ -566,6 +708,13 @@ def main():
         help="Also train YOLOv8 DETECTION baseline using 7-channel multispectral data",
 )
 
+    # Scratch model arguments
+    parser.add_argument(
+        "--include-scratch",
+        action="store_true",
+        help="Also train the ScratchFireModel (binary classifier) using 7-channel patches",
+    )
+
     # Training arguments
     parser.add_argument("--batch-size", type=int, default=16, help="Batch size")
     parser.add_argument("--epochs", type=int, default=50, help="Number of epochs")
@@ -716,7 +865,6 @@ def main():
 
     # Runing bag of models
     # SMP models
-
     for encoder in encoders_to_train:
         encoder_output_dir = args.output_dir / f"encoder_{encoder}"
 
@@ -784,6 +932,24 @@ def main():
         )
 
         print("YOLO validation metrics:", metrics.get("val_results"))
+
+    # From Scratch model
+    if args.include_scratch:
+        print("\n" + "#" * 80)
+        print("TRAINING SCRATCH MODEL (BINARY CLASSIFIER)")
+        print("#" * 80 + "\n")
+
+        best_val_loss = train_scratch_classifier(
+            patches_dir=args.patches_dir,
+            output_dir=args.output_dir / "scratch_model",
+            batch_size=args.batch_size,
+            num_epochs=args.epochs,
+            learning_rate=args.lr,
+            weight_decay=args.weight_decay,
+            num_workers=args.num_workers,
+            device=args.device,
+        )
+        print(f"Scratch best val loss: {best_val_loss:.4f}")
 
 
 if __name__ == "__main__":
