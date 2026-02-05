@@ -46,6 +46,7 @@ from dataset import (
 )
 from model import FireSegmentationModel, CombinedLoss, ENCODER_OPTIONS
 from scratch_model import ScratchFireModel
+from unet_scratch import UNet
 from metrics import CombinedMetrics
 from constants import get_device, get_class_names
 
@@ -482,12 +483,16 @@ def train(
 
     # Create model
     print("\nCreating model...")
-    model = FireSegmentationModel(
-        encoder_name=encoder_name,
-        num_classes=num_classes,
-        in_channels=7,
-        encoder_weights="imagenet",
-        architecture=architecture,
+    if architecture == "unet_scratch":
+        UNetScratch = _load_unet_scratch_model()
+        model = UNetScratch(in_channels=7, num_classes=num_classes, retainDim=True)
+    else:
+        model = FireSegmentationModel(
+            encoder_name=encoder_name,
+            num_classes=num_classes,
+            in_channels=7,
+            encoder_weights="imagenet",
+            architecture=architecture,
     )
     model = model.to(device)
 
@@ -732,7 +737,7 @@ def main():
         "--architecture",
         type=str,
         default="unet",
-        choices=["unet", "unetplusplus", "deeplabv3plus"],
+        choices=["unet", "unetplusplus", "deeplabv3plus", "unet_scratch"],
         help="Segmentation architecture",
     )
 
