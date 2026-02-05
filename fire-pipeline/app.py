@@ -29,9 +29,20 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Min width for image viewer so it doesn't render as narrow strips
+st.markdown(
+    """<style>div[data-testid="stPlotlyChart"]{min-width:1000px !important}</style>""",
+    unsafe_allow_html=True,
+)
+
 from satellite_fetcher import get_fetcher, SatelliteImage
 from storage import StorageManager, AnalysisRecord
-from inference import FireInferencePipeline, InferenceResult, create_visualization
+from inference import (
+    FireInferencePipeline,
+    InferenceResult,
+    create_visualization,
+    create_fire_mask_visualization,
+)
 
 
 # Configuration (can be set via environment variables)
@@ -113,6 +124,81 @@ def create_rgb_preview(image: SatelliteImage) -> np.ndarray:
     return (rgb * 255).astype(np.uint8)
 
 
+def resize_for_display(img: np.ndarray, max_size: int = 600) -> np.ndarray:
+    """Resize image for display, capping the longest side to max_size."""
+    from PIL import Image
+
+    h, w = img.shape[:2]
+    if max(h, w) <= max_size:
+        return img
+    scale = max_size / max(h, w)
+    new_w = max(1, int(w * scale))
+    new_h = max(1, int(h * scale))
+    pil = Image.fromarray(img)
+    return np.array(pil.resize((new_w, new_h), Image.Resampling.LANCZOS))
+
+
+def render_synced_images(
+    img1: np.ndarray,
+    img2: np.ndarray,
+    label1: str = "Original",
+    label2: str = "Fire detection",
+    max_size: int = 1000,
+) -> None:
+    """
+    Render two images side-by-side with Plotly, synced zoom/pan.
+    Uses px.imshow facet_col for consistent equal sizing of both panels.
+    """
+    import plotly.express as px
+
+    # Resize both to same size for display (whole image visible)
+    img1 = resize_for_display(img1, max_size=max_size)
+    img2 = resize_for_display(img2, max_size=max_size)
+
+    # Ensure same dimensions for sync (crop to min)
+    h1, w1 = img1.shape[:2]
+    h2, w2 = img2.shape[:2]
+    h, w = min(h1, h2), min(w1, w2)
+    img1 = img1[:h, :w]
+    img2 = img2[:h, :w]
+
+    # Stack as (2, H, W, 3) - facet_col ensures equal sizing for both panels
+    stacked = np.stack([img1, img2], axis=0)
+    fig = px.imshow(
+        stacked,
+        facet_col=0,
+        binary_string=True,
+        facet_col_wrap=2,
+        labels={"facet_col": ""},
+    )
+    # Set facet titles
+    for i, label in enumerate([label1, label2]):
+        if i < len(fig.layout.annotations):
+            fig.layout.annotations[i].text = label
+
+    fig.update_xaxes(showticklabels=False, showgrid=False)
+    fig.update_yaxes(showticklabels=False, showgrid=False, scaleanchor="x")
+    display_height = max(450, min(h, 600))
+    fig.update_layout(
+        margin=dict(l=10, r=10, t=50, b=10),
+        height=display_height,
+        width=max(1000, w),  # Min 1000px so images don't render as narrow strips
+        autosize=True,
+        dragmode="pan",
+        showlegend=False,
+    )
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        config={
+            "scrollZoom": True,
+            "displayModeBar": True,
+            "modeBarButtonsToRemove": ["lasso2d", "select2d"],
+            "doubleClick": "reset",
+        },
+    )
+
+
 def main():
     """Main app function."""
     # Initialize session state for navigation
@@ -150,30 +236,43 @@ def main():
         else:
             st.warning("Model not found - using mock inference")
 
-        # Mock fetcher warning
-        if USE_MOCK_FETCHER:
-            st.warning("Using mock satellite data")
-            with st.expander("How to use real data"):
-                st.markdown("""
-                To fetch real Sentinel-2 imagery:
+        # Filters for New Analysis (in sidebar so main area is full width)
+        if st.session_state.page == "New Analysis":
+            st.subheader("Filters")
+            _render_analysis_filters()
+            if USE_MOCK_FETCHER:
+                with st.expander("Using mock data"):
+                    st.caption("Set FIRE_USE_MOCK=false for real Sentinel-2 imagery.")
+            st.markdown("---")
+            storage = get_storage()
+            stats = storage.get_statistics()
+            st.metric("Total Analyses", stats["total_analyses"])
+            st.metric("Fire Detections", stats["fire_detections"])
+        else:
+            # Mock fetcher warning (only when not on New Analysis)
+            if USE_MOCK_FETCHER:
+                st.warning("Using mock satellite data")
+                with st.expander("How to use real data"):
+                    st.markdown("""
+                    To fetch real Sentinel-2 imagery:
 
-                **Option 1: Environment variable**
-                ```bash
-                export FIRE_USE_MOCK=false
-                streamlit run app.py
-                ```
+                    **Option 1: Environment variable**
+                    ```bash
+                    export FIRE_USE_MOCK=false
+                    streamlit run app.py
+                    ```
 
-                **Option 2: Edit app.py**
-                Set `USE_MOCK_FETCHER = False`
+                    **Option 2: Edit app.py**
+                    Set `USE_MOCK_FETCHER = False`
 
-                Requires `planetary-computer` package.
-                """)
+                    Requires `planetary-computer` package.
+                    """)
 
-        # Storage info
-        storage = get_storage()
-        stats = storage.get_statistics()
-        st.metric("Total Analyses", stats["total_analyses"])
-        st.metric("Fire Detections", stats["fire_detections"])
+            # Storage info
+            storage = get_storage()
+            stats = storage.get_statistics()
+            st.metric("Total Analyses", stats["total_analyses"])
+            st.metric("Fire Detections", stats["fire_detections"])
 
     # Main content
     page = st.session_state.page
@@ -185,136 +284,116 @@ def main():
         render_statistics()
 
 
+def _render_analysis_filters() -> None:
+    """Render analysis filters in sidebar. Stores bbox in session state for map."""
+    input_method = st.radio(
+        "Input method",
+        ["Coordinates", "Preset Locations"],
+        horizontal=False,
+    )
+
+    if input_method == "Coordinates":
+        center_lon = st.number_input(
+            "Longitude",
+            min_value=-180.0,
+            max_value=180.0,
+            value=-122.0,
+            step=0.1,
+        )
+        center_lat = st.number_input(
+            "Latitude",
+            min_value=-90.0,
+            max_value=90.0,
+            value=37.5,
+            step=0.1,
+        )
+        region_size = st.slider(
+            "Region Size (°)",
+            min_value=0.1,
+            max_value=1.0,
+            value=0.3,
+            step=0.05,
+        )
+        half_size = region_size / 2
+        bbox = (
+            center_lon - half_size,
+            center_lat - half_size,
+            center_lon + half_size,
+            center_lat + half_size,
+        )
+    else:
+        # Catalonia first (default), then other regions. Bbox: (west, south, east, north)
+        presets = {
+            # Catalonia (Spain) - provinces spanning the region
+            "Catalonia › All": (0.15, 40.5, 3.35, 42.9),
+            "Catalonia › Barcelona": (1.5, 41.2, 2.5, 41.7),
+            "Catalonia › Girona": (2.5, 41.7, 3.2, 42.5),
+            "Catalonia › Tarragona": (0.8, 40.8, 1.8, 41.5),
+            "Catalonia › Lleida": (0.3, 41.5, 1.5, 42.0),
+            # Other regions
+            "California Coast": (-122.5, 37.0, -121.5, 38.0),
+            "Portugal": (-8.5, 38.5, -7.5, 39.5),
+            "Greece": (22.5, 37.5, 23.5, 38.5),
+            "Australia (NSW)": (149.5, -34.0, 150.5, -33.0),
+        }
+        preset_keys = list(presets.keys())
+        location = st.selectbox("Location", preset_keys, index=0)
+        bbox = presets[location]
+        center_lon = (bbox[0] + bbox[2]) / 2
+        center_lat = (bbox[1] + bbox[3]) / 2
+
+    st.caption(f"Bbox: ({bbox[0]:.2f}, {bbox[1]:.2f}) → ({bbox[2]:.2f}, {bbox[3]:.2f})")
+    st.session_state.analysis_bbox = bbox
+    st.session_state.analysis_center = (center_lat, center_lon)
+
+    # Map in sidebar
+    try:
+        import folium
+        from streamlit_folium import st_folium
+
+        m = folium.Map(
+            location=[center_lat, center_lon],
+            zoom_start=9,
+            tiles="OpenStreetMap",
+        )
+        folium.Rectangle(
+            bounds=[[bbox[1], bbox[0]], [bbox[3], bbox[2]]],
+            color="red",
+            fill=True,
+            fillOpacity=0.2,
+        ).add_to(m)
+        st_folium(m, height=220)
+    except ImportError:
+        pass
+
+    st.markdown("---")
+    st.caption("Date range")
+    end_date = st.date_input(
+        "End Date",
+        value=datetime.now().date(),
+        max_value=datetime.now().date(),
+    )
+    days_back = st.slider("Days to search", min_value=1, max_value=60, value=30)
+    start_date = end_date - timedelta(days=days_back)
+    max_cloud = st.slider("Max Cloud (%)", min_value=5, max_value=50, value=20)
+
+    st.markdown("---")
+    if st.button("🛰️ Fetch & Analyze", type="primary", use_container_width=True):
+        run_analysis(
+            bbox=bbox,
+            date_range=(start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")),
+            max_cloud_cover=max_cloud,
+        )
+        st.rerun()
+
+
 def render_new_analysis():
-    """Render the new analysis page."""
-    st.header("New Fire Analysis")
+    """Render the new analysis page - full-width main area for results."""
+    st.subheader("Results")
 
-    col1, col2 = st.columns([2, 1])
-
-    with col1:
-        st.subheader("Select Region")
-
-        # Location input methods
-        input_method = st.radio(
-            "Input method",
-            ["Coordinates", "Preset Locations"],
-            horizontal=True,
-        )
-
-        if input_method == "Coordinates":
-            col_lon, col_lat = st.columns(2)
-            with col_lon:
-                center_lon = st.number_input(
-                    "Center Longitude",
-                    min_value=-180.0,
-                    max_value=180.0,
-                    value=-122.0,
-                    step=0.1,
-                )
-            with col_lat:
-                center_lat = st.number_input(
-                    "Center Latitude",
-                    min_value=-90.0,
-                    max_value=90.0,
-                    value=37.5,
-                    step=0.1,
-                )
-
-            region_size = st.slider(
-                "Region Size (degrees)",
-                min_value=0.1,
-                max_value=1.0,
-                value=0.3,
-                step=0.05,
-            )
-
-            # Calculate bbox
-            half_size = region_size / 2
-            bbox = (
-                center_lon - half_size,
-                center_lat - half_size,
-                center_lon + half_size,
-                center_lat + half_size,
-            )
-        else:
-            # Preset locations
-            presets = {
-                "California Coast": (-122.5, 37.0, -121.5, 38.0),
-                "Portugal": (-8.5, 38.5, -7.5, 39.5),
-                "Greece": (22.5, 37.5, 23.5, 38.5),
-                "Australia (NSW)": (149.5, -34.0, 150.5, -33.0),
-                "Spain (Catalonia)": (1.5, 41.0, 2.5, 42.0),
-            }
-
-            location = st.selectbox("Location", list(presets.keys()))
-            bbox = presets[location]
-            center_lon = (bbox[0] + bbox[2]) / 2
-            center_lat = (bbox[1] + bbox[3]) / 2
-
-        st.info(f"Bounding box: ({bbox[0]:.2f}, {bbox[1]:.2f}) to ({bbox[2]:.2f}, {bbox[3]:.2f})")
-
-        # Display map
-        try:
-            import folium
-            from streamlit_folium import st_folium
-
-            m = folium.Map(
-                location=[center_lat, center_lon],
-                zoom_start=9,
-                tiles="OpenStreetMap",
-            )
-
-            # Add bbox rectangle
-            folium.Rectangle(
-                bounds=[[bbox[1], bbox[0]], [bbox[3], bbox[2]]],
-                color="red",
-                fill=True,
-                fillOpacity=0.2,
-            ).add_to(m)
-
-            st_folium(m, width=600, height=400)
-        except ImportError:
-            st.warning("Install folium and streamlit-folium for map display")
-            st.text(f"Region: {bbox}")
-
-    with col2:
-        st.subheader("Date Range")
-        st.caption("Sentinel-2 revisits every ~5 days. We search this window to find the clearest image available.")
-
-        # Date selection
-        end_date = st.date_input(
-            "End Date",
-            value=datetime.now().date(),
-            max_value=datetime.now().date(),
-        )
-
-        days_back = st.slider(
-            "Days to search",
-            min_value=1,
-            max_value=60,
-            value=30,
-        )
-
-        start_date = end_date - timedelta(days=days_back)
-        st.info(f"Searching: {start_date} to {end_date}")
-
-        # Cloud cover filter
-        max_cloud = st.slider(
-            "Max Cloud Cover (%)",
-            min_value=5,
-            max_value=50,
-            value=20,
-        )
-
-        st.markdown("---")
-
-        # Fetch button
-        if st.button("🛰️ Fetch & Analyze", type="primary", use_container_width=True):
-            run_analysis(
-                bbox=bbox,
-                date_range=(start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")),
-                max_cloud_cover=max_cloud,
-            )
+    # Results - full width main area
+    if "analysis_result" in st.session_state and st.session_state.analysis_result:
+        render_analysis_results(st.session_state.analysis_result)
 
 
 def run_analysis(
@@ -322,7 +401,7 @@ def run_analysis(
     date_range: tuple[str, str],
     max_cloud_cover: float,
 ):
-    """Fetch satellite data and run fire detection."""
+    """Fetch satellite data, run fire detection, store results in session state."""
     storage = get_storage()
     model = get_model()
 
@@ -343,17 +422,6 @@ def run_analysis(
             st.warning("No suitable imagery found for the selected region and date range.")
             return
 
-    st.success(f"Found image: {image.scene_id}")
-
-    # Display image info
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Image Date", image.datetime.strftime("%Y-%m-%d") if image.datetime else "Unknown")
-    with col2:
-        st.metric("Cloud Cover", f"{image.cloud_cover:.1f}%")
-    with col3:
-        st.metric("Resolution", f"{image.data.shape[0]}x{image.data.shape[1]}")
-
     # Run inference
     with st.spinner("Running fire detection..."):
         if model:
@@ -365,50 +433,77 @@ def run_analysis(
     if model:
         visualization = create_visualization(image.data, result)
     else:
-        # Simple mock visualization
         rgb = create_rgb_preview(image)
         visualization = rgb.copy()
         fire_mask = result.segmentation > 0
         visualization[fire_mask] = [255, 0, 0]  # Red overlay for fire
 
-    # Display results
+    # Save to storage
+    with st.spinner("Saving analysis..."):
+        analysis_id = storage.save_analysis(
+            satellite_image=image,
+            inference_result=result,
+            visualization=visualization,
+            metadata={"bbox": list(bbox), "date_range": list(date_range)},
+        )
+
+    # Store in session state for rendering in main area
+    st.session_state.analysis_result = {
+        "image": image,
+        "result": result,
+        "visualization": visualization,
+        "analysis_id": analysis_id,
+    }
+
+
+def render_analysis_results(data: dict) -> None:
+    """Render analysis results in the main content area."""
+    image = data["image"]
+    result = data["result"]
+    visualization = data["visualization"]
+    analysis_id = data["analysis_id"]
+
+    st.markdown("---")
+    st.success(f"Found image: {image.scene_id}")
+
+    # Image info
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Image Date", image.datetime.strftime("%Y-%m-%d") if image.datetime else "Unknown")
+    with col2:
+        st.metric("Cloud Cover", f"{image.cloud_cover:.1f}%")
+    with col3:
+        st.metric("Resolution", f"{image.data.shape[0]}x{image.data.shape[1]}")
+
     st.markdown("---")
     st.subheader("Results")
 
     # Metrics
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric(
-            "Fire Detected",
-            "🔥 Yes" if result.has_fire else "✅ No",
-        )
+        st.metric("Fire Detected", "🔥 Yes" if result.has_fire else "✅ No")
     with col2:
-        st.metric(
-            "Confidence",
-            f"{result.fire_confidence:.1%}",
-        )
+        st.metric("Confidence", f"{result.fire_confidence:.1%}")
     with col3:
-        st.metric(
-            "Fire Coverage",
-            f"{result.fire_fraction:.2%}",
-        )
+        st.metric("Fire Coverage", f"{result.fire_fraction:.2%}")
     with col4:
-        st.metric(
-            "Classes",
-            result.num_classes,
-        )
+        st.metric("Classes", result.num_classes)
 
-    # Images
-    img_col1, img_col2 = st.columns(2)
+    # Synced zoom/pan viewer - full width in main area
+    rgb_preview = create_rgb_preview(image)
+    st.caption("Scroll to zoom, drag to pan. Both images stay in sync.")
+    render_synced_images(rgb_preview, visualization, "Original", "Fire detection")
 
-    with img_col1:
-        st.markdown("**Original Image**")
-        rgb_preview = create_rgb_preview(image)
-        st.image(rgb_preview, use_container_width=True)
-
-    with img_col2:
-        st.markdown("**Fire Detection**")
-        st.image(visualization, use_container_width=True)
+    # When fire detected, show high-contrast fire mask so sparse detections are visible
+    if result.has_fire:
+        with st.expander("📍 Where are the fires?", expanded=True):
+            fire_mask_viz = create_fire_mask_visualization(
+                result.segmentation,
+                num_classes=result.num_classes,
+                dilate_pixels=3,
+            )
+            st.caption("Fire pixels (red) on dark background. Dilated 3px so sparse detections are visible.")
+            st.image(resize_for_display(fire_mask_viz, max_size=1000), width="stretch")
 
     # Severity breakdown
     if result.severity_counts:
@@ -419,15 +514,6 @@ def run_analysis(
                 total = sum(result.severity_counts.values())
                 pct = count / total * 100 if total > 0 else 0
                 st.metric(name.replace("_", " ").title(), f"{pct:.1f}%")
-
-    # Save to storage
-    with st.spinner("Saving analysis..."):
-        analysis_id = storage.save_analysis(
-            satellite_image=image,
-            inference_result=result,
-            visualization=visualization,
-            metadata={"bbox": list(bbox), "date_range": list(date_range)},
-        )
 
     st.success(f"Analysis saved! ID: {analysis_id}")
 
@@ -511,18 +597,41 @@ def render_history():
 
             record = analysis["record"]
 
-            col1, col2 = st.columns(2)
+            # Give images 80% width, details 20%
+            img_col, details_col = st.columns([4, 1])
 
-            with col1:
-                if "visualization" in analysis:
-                    st.image(analysis["visualization"], use_container_width=True)
-                elif "image" in analysis:
-                    # Create RGB preview
+            with img_col:
+                if "visualization" in analysis and "image" in analysis:
                     rgb = analysis["image"][:, :, [2, 1, 0]]
                     rgb = np.clip(rgb * 3.0, 0, 1)
-                    st.image((rgb * 255).astype(np.uint8), use_container_width=True)
+                    rgb_uint8 = (rgb * 255).astype(np.uint8)
+                    st.caption("Scroll to zoom, drag to pan.")
+                    render_synced_images(
+                        rgb_uint8,
+                        analysis["visualization"],
+                        "Original",
+                        "Fire detection",
+                    )
+                    if record.has_fire and "segmentation" in analysis:
+                        with st.expander("📍 Where are the fires?", expanded=False):
+                            fire_mask_viz = create_fire_mask_visualization(
+                                analysis["segmentation"],
+                                dilate_pixels=3,
+                            )
+                            st.image(
+                                resize_for_display(fire_mask_viz, max_size=1000),
+                                width="stretch",
+                            )
+                elif "visualization" in analysis:
+                    viz = resize_for_display(analysis["visualization"])
+                    st.image(viz, width="stretch")
+                elif "image" in analysis:
+                    rgb = analysis["image"][:, :, [2, 1, 0]]
+                    rgb = np.clip(rgb * 3.0, 0, 1)
+                    rgb_uint8 = (rgb * 255).astype(np.uint8)
+                    st.image(resize_for_display(rgb_uint8), width="stretch")
 
-            with col2:
+            with details_col:
                 st.markdown(f"**Scene:** {record.scene_id}")
                 st.markdown(f"**Date:** {record.satellite_datetime}")
                 st.markdown(f"**Location:** ({record.center_lon:.2f}, {record.center_lat:.2f})")

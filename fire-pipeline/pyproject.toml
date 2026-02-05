@@ -31,6 +31,7 @@ app = [
     "scipy>=1.11.0",
     "torch>=2.0.0",
     "segmentation-models-pytorch>=0.3.0",
+    "plotly>=5.0.0",
 ]
 all = [
     "torch>=2.0.0",
@@ -45,6 +46,7 @@ all = [
     "planetary-computer>=1.0.0",
     "pystac-client>=0.7.0",
     "scipy>=1.11.0",
+    "plotly>=5.0.0",
 ]
 test = [
     "pytest>=7.0.0",
