@@ -35,6 +35,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+from constants import get_class_names
 from satellite_fetcher import get_fetcher, SatelliteImage
 from storage import StorageManager, AnalysisRecord
 from inference import (
@@ -288,11 +289,22 @@ def _render_analysis_filters() -> None:
     """Render analysis filters in sidebar. Stores bbox in session state for map."""
     input_method = st.radio(
         "Input method",
-        ["Coordinates", "Preset Locations"],
+        ["Draw on map", "Preset Locations", "Coordinates"],
         horizontal=False,
     )
 
-    if input_method == "Coordinates":
+    if input_method == "Draw on map":
+        # Use bbox from map drawing if available, else default
+        bbox = st.session_state.get("drawn_bbox")
+        if bbox is None:
+            bbox = (2.0, 41.5, 2.5, 42.0)  # Default: Barcelona area
+        center_lon = (bbox[0] + bbox[2]) / 2
+        center_lat = (bbox[1] + bbox[3]) / 2
+        st.caption("Draw a rectangle on the map below to select the analysis area.")
+        if st.button("Clear selection", key="clear_draw"):
+            st.session_state.pop("drawn_bbox", None)
+            st.rerun()
+    elif input_method == "Coordinates":
         center_lon = st.number_input(
             "Longitude",
             min_value=-180.0,
@@ -321,20 +333,21 @@ def _render_analysis_filters() -> None:
             center_lon + half_size,
             center_lat + half_size,
         )
-    else:
-        # Catalonia first (default), then other regions. Bbox: (west, south, east, north)
+    elif input_method == "Preset Locations":
+        # Smaller areas (~0.2–0.4°) for better resolution. Bbox: (west, south, east, north)
         presets = {
-            # Catalonia (Spain) - provinces spanning the region
-            "Catalonia › All": (0.15, 40.5, 3.35, 42.9),
-            "Catalonia › Barcelona": (1.5, 41.2, 2.5, 41.7),
-            "Catalonia › Girona": (2.5, 41.7, 3.2, 42.5),
-            "Catalonia › Tarragona": (0.8, 40.8, 1.8, 41.5),
-            "Catalonia › Lleida": (0.3, 41.5, 1.5, 42.0),
+            # Catalonia (Spain) - ~20–40 km regions
+            "Catalonia › Barcelona": (1.9, 41.3, 2.2, 41.5),
+            "Catalonia › Girona": (2.7, 41.9, 3.0, 42.2),
+            "Catalonia › Tarragona": (1.1, 41.0, 1.4, 41.2),
+            "Catalonia › Lleida": (0.6, 41.6, 0.9, 41.8),
+            "Catalonia › Costa Brava": (2.9, 41.7, 3.2, 42.0),
+            "Catalonia › Pyrenees": (1.0, 42.2, 1.4, 42.5),
             # Other regions
-            "California Coast": (-122.5, 37.0, -121.5, 38.0),
-            "Portugal": (-8.5, 38.5, -7.5, 39.5),
-            "Greece": (22.5, 37.5, 23.5, 38.5),
-            "Australia (NSW)": (149.5, -34.0, 150.5, -33.0),
+            "California › Bay Area": (-122.5, 37.5, -122.0, 38.0),
+            "Portugal › Lisbon": (-9.2, 38.6, -8.9, 38.8),
+            "Greece › Athens": (23.6, 37.9, 23.8, 38.1),
+            "Australia › Sydney": (150.9, -33.9, 151.3, -33.7),
         }
         preset_keys = list(presets.keys())
         location = st.selectbox("Location", preset_keys, index=0)
@@ -342,14 +355,56 @@ def _render_analysis_filters() -> None:
         center_lon = (bbox[0] + bbox[2]) / 2
         center_lat = (bbox[1] + bbox[3]) / 2
 
-    st.caption(f"Bbox: ({bbox[0]:.2f}, {bbox[1]:.2f}) → ({bbox[2]:.2f}, {bbox[3]:.2f})")
+    st.caption(f"Bbox: ({bbox[0]:.3f}, {bbox[1]:.3f}) → ({bbox[2]:.3f}, {bbox[3]:.3f})")
     st.session_state.analysis_bbox = bbox
     st.session_state.analysis_center = (center_lat, center_lon)
 
-    # Map in sidebar
+    # Map in sidebar with town markers
     try:
         import folium
         from streamlit_folium import st_folium
+
+        # Major towns (name, lat, lon) - filtered by bbox
+        TOWNS = [
+            # Catalonia
+            ("Barcelona", 41.3851, 2.1734),
+            ("Girona", 41.9794, 2.8214),
+            ("Tarragona", 41.1189, 1.2445),
+            ("Lleida", 41.6176, 0.6200),
+            ("Figueres", 42.2675, 2.9611),
+            ("Reus", 41.1569, 1.1086),
+            ("Sabadell", 41.5433, 2.1094),
+            ("Terrassa", 41.5636, 2.0109),
+            ("Manresa", 41.7250, 1.8261),
+            ("Mataró", 41.5421, 2.4445),
+            ("Vic", 41.9303, 2.2544),
+            ("Olot", 42.1822, 2.4891),
+            ("Sitges", 41.2370, 1.8113),
+            ("Tortosa", 40.8125, 0.5211),
+            ("Igualada", 41.5814, 1.6172),
+            # California
+            ("San Francisco", 37.7749, -122.4194),
+            ("Oakland", 37.8044, -122.2712),
+            ("San Jose", 37.3382, -121.8863),
+            ("Sacramento", 38.5816, -121.4944),
+            # Portugal
+            ("Lisbon", 38.7223, -9.1393),
+            ("Porto", 41.1579, -8.6291),
+            ("Faro", 37.0194, -7.9304),
+            # Greece
+            ("Athens", 37.9838, 23.7275),
+            ("Thessaloniki", 40.6401, 22.9444),
+            ("Patras", 38.2466, 21.7346),
+            # Australia NSW
+            ("Sydney", -33.8688, 151.2093),
+            ("Newcastle", -32.9283, 151.7817),
+            ("Wollongong", -34.4278, 150.8931),
+        ]
+        west, south, east, north = bbox
+        towns_in_view = [
+            (n, lat, lon) for n, lat, lon in TOWNS
+            if south <= lat <= north and west <= lon <= east
+        ]
 
         m = folium.Map(
             location=[center_lat, center_lon],
@@ -362,7 +417,68 @@ def _render_analysis_filters() -> None:
             fill=True,
             fillOpacity=0.2,
         ).add_to(m)
-        st_folium(m, height=220)
+        for name, lat, lon in towns_in_view:
+            folium.CircleMarker(
+                [lat, lon],
+                radius=6,
+                popup=name,
+                tooltip=name,
+                color="blue",
+                fill=True,
+                fillColor="blue",
+                fillOpacity=0.6,
+                weight=1,
+            ).add_to(m)
+
+        # Add Draw plugin when "Draw on map" is selected
+        draw_enabled = input_method == "Draw on map"
+        if draw_enabled:
+            from folium.plugins import Draw
+
+            Draw(
+                export=False,
+                show_geometry_on_click=False,
+                draw_options={
+                    "rectangle": {"shapeOptions": {"color": "#3388ff"}},
+                    "polygon": False,
+                    "polyline": False,
+                    "circle": False,
+                    "circlemarker": False,
+                    "marker": False,
+                },
+                edit_options={"edit": True, "remove": True},
+            ).add_to(m)
+
+        map_data = st_folium(
+            m,
+            height=220,
+            key="analysis_map",
+            returned_objects=["last_active_drawing", "all_drawings"],
+        )
+
+        # Parse drawn rectangle and update bbox
+        if draw_enabled and map_data:
+            drawn = map_data.get("last_active_drawing") or (
+                (map_data.get("all_drawings") or [])[-1] if map_data.get("all_drawings") else None
+            )
+            if drawn and isinstance(drawn, dict):
+                geom = drawn.get("geometry") or drawn
+                coords = geom.get("coordinates") if isinstance(geom, dict) else None
+                if coords:
+                    # GeoJSON: [[[lon,lat],...]] for polygon/rectangle
+                    ring = coords[0] if isinstance(coords[0][0], (list, tuple)) else coords
+                    lons = [p[0] for p in ring]
+                    lats = [p[1] for p in ring]
+                    if lons and lats:
+                        west, east = min(lons), max(lons)
+                        south, north = min(lats), max(lats)
+                        if east - west > 0.01 and north - south > 0.01:  # Min ~1km
+                            new_bbox = (west, south, east, north)
+                            prev = st.session_state.get("drawn_bbox")
+                            if prev is None or abs(prev[0] - west) > 1e-5 or abs(prev[3] - north) > 1e-5:
+                                st.session_state.drawn_bbox = new_bbox
+                                st.session_state.analysis_bbox = new_bbox
+                                st.rerun()
     except ImportError:
         pass
 
@@ -456,8 +572,72 @@ def run_analysis(
     }
 
 
-def render_analysis_results(data: dict) -> None:
-    """Render analysis results in the main content area."""
+def _loaded_analysis_to_display_data(analysis: dict) -> dict | None:
+    """
+    Convert loaded analysis (from storage.load_analysis) to the format
+    expected by render_analysis_results.
+    """
+    record = analysis.get("record")
+    image_arr = analysis.get("image")
+    segmentation = analysis.get("segmentation")
+    probabilities = analysis.get("probabilities")
+    visualization = analysis.get("visualization")
+
+    if not all([record, image_arr is not None, segmentation is not None, visualization is not None]):
+        return None
+
+    # Build SatelliteImage for display (crs not stored, use placeholder)
+    image = SatelliteImage(
+        data=image_arr,
+        bounds=record.bbox,
+        crs="EPSG:4326",
+        datetime=record.satellite_datetime,
+        scene_id=record.scene_id,
+        cloud_cover=record.cloud_cover,
+        platform=record.platform or "Unknown",
+    )
+
+    # Compute severity_counts from segmentation
+    num_classes = record.num_classes
+    try:
+        class_names = get_class_names(num_classes)
+    except ValueError:
+        class_names = tuple(f"class_{i}" for i in range(num_classes))
+    severity_counts = {name: int((segmentation == i).sum()) for i, name in enumerate(class_names)}
+
+    # Build InferenceResult (probabilities may be missing in older saves)
+    if probabilities is None or probabilities.shape[2] != num_classes:
+        probs = np.zeros((*segmentation.shape, num_classes), dtype=np.float32)
+        for c in range(num_classes):
+            probs[:, :, c] = (segmentation == c).astype(np.float32)
+        probabilities = probs
+
+    result = InferenceResult(
+        segmentation=segmentation,
+        probabilities=probabilities,
+        has_fire=record.has_fire,
+        fire_confidence=record.fire_confidence,
+        fire_fraction=record.fire_fraction,
+        severity_counts=severity_counts,
+        num_classes=num_classes,
+        image_shape=image_arr.shape[:2],
+    )
+
+    return {
+        "image": image,
+        "result": result,
+        "visualization": visualization,
+        "analysis_id": record.id,
+    }
+
+
+def render_analysis_results(data: dict, from_history: bool = False) -> None:
+    """Render analysis results in the main content area.
+
+    Args:
+        data: Dict with image, result, visualization, analysis_id
+        from_history: If True, show Close/Delete buttons instead of "Analysis saved!"
+    """
     image = data["image"]
     result = data["result"]
     visualization = data["visualization"]
@@ -467,13 +647,29 @@ def render_analysis_results(data: dict) -> None:
     st.success(f"Found image: {image.scene_id}")
 
     # Image info
-    col1, col2, col3 = st.columns(3)
+    h, w = image.data.shape[:2]
+    # Sentinel-2 ~10m GSD: approximate ground coverage in km
+    gsd_m = 10
+    ground_km_x = w * gsd_m / 1000
+    ground_km_y = h * gsd_m / 1000
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Image Date", image.datetime.strftime("%Y-%m-%d") if image.datetime else "Unknown")
     with col2:
         st.metric("Cloud Cover", f"{image.cloud_cover:.1f}%")
     with col3:
-        st.metric("Resolution", f"{image.data.shape[0]}x{image.data.shape[1]}")
+        st.metric("Resolution", f"{h}×{w} px")
+    with col4:
+        st.metric("Ground coverage", f"~{ground_km_x:.1f}×{ground_km_y:.1f} km")
+
+    with st.expander("ℹ️ About this analysis"):
+        st.markdown("""
+        **What you're seeing:** The image is the exact area analyzed—cropped from the Sentinel-2 tile that intersects your selected region. The red overlay is the model's pixel-level prediction (no dilation).
+
+        **Model training:** This model was trained on **burn scars** (post-fire damage) from the CEMS dataset, not active flames. It detects areas that show spectral signatures of past burning (low NIR, high SWIR). Some terrain (bare soil, agriculture, shadows) can trigger false positives.
+
+        **Resolution:** Sentinel-2 L2A has ~10 m ground sampling. At 1521×1666 px, that's ~15×17 km. The sidebar bbox may be larger—you see the tile intersection that was actually fetched.
+        """)
 
     st.markdown("---")
     st.subheader("Results")
@@ -497,25 +693,43 @@ def render_analysis_results(data: dict) -> None:
     # When fire detected, show high-contrast fire mask so sparse detections are visible
     if result.has_fire:
         with st.expander("📍 Where are the fires?", expanded=True):
+            dilate = st.slider("Dilation (px)", 0, 8, 3, help="Expand fire pixels for visibility. 0 = raw model output.")
             fire_mask_viz = create_fire_mask_visualization(
                 result.segmentation,
                 num_classes=result.num_classes,
-                dilate_pixels=3,
+                dilate_pixels=dilate,
             )
-            st.caption("Fire pixels (red) on dark background. Dilated 3px so sparse detections are visible.")
+            st.caption("Fire pixels (red) on dark background. Set dilation to 0 to see raw model output.")
             st.image(resize_for_display(fire_mask_viz, max_size=1000), width="stretch")
 
     # Severity breakdown
     if result.severity_counts:
         st.markdown("**Severity Distribution**")
         cols = st.columns(len(result.severity_counts))
+        total = sum(result.severity_counts.values())
         for i, (name, count) in enumerate(result.severity_counts.items()):
             with cols[i]:
-                total = sum(result.severity_counts.values())
                 pct = count / total * 100 if total > 0 else 0
-                st.metric(name.replace("_", " ").title(), f"{pct:.1f}%")
+                # Use more decimals for small values so fire (often <0.1%) is visible
+                fmt = f"{pct:.2f}%" if 0 < pct < 0.1 else f"{pct:.1f}%"
+                st.metric(name.replace("_", " ").title(), fmt)
 
-    st.success(f"Analysis saved! ID: {analysis_id}")
+    if from_history:
+        st.markdown("---")
+        col1, col2, _ = st.columns([1, 1, 4])
+        with col1:
+            if st.button("Delete Analysis", type="secondary"):
+                get_storage().delete_analysis(analysis_id)
+                if "view_analysis" in st.session_state:
+                    del st.session_state["view_analysis"]
+                st.rerun()
+        with col2:
+            if st.button("Close"):
+                if "view_analysis" in st.session_state:
+                    del st.session_state["view_analysis"]
+                st.rerun()
+    else:
+        st.success(f"Analysis saved! ID: {analysis_id}")
 
 
 def render_history():
@@ -587,63 +801,17 @@ def render_history():
 
             st.markdown("---")
 
-    # View selected analysis
+    # View selected analysis - reuse same view as New Analysis
     if "view_analysis" in st.session_state:
         analysis_id = st.session_state["view_analysis"]
         analysis = storage.load_analysis(analysis_id)
 
         if analysis:
-            st.subheader(f"Analysis: {analysis_id}")
-
-            record = analysis["record"]
-
-            # Give images 80% width, details 20%
-            img_col, details_col = st.columns([4, 1])
-
-            with img_col:
-                if "visualization" in analysis and "image" in analysis:
-                    rgb = analysis["image"][:, :, [2, 1, 0]]
-                    rgb = np.clip(rgb * 3.0, 0, 1)
-                    rgb_uint8 = (rgb * 255).astype(np.uint8)
-                    st.caption("Scroll to zoom, drag to pan.")
-                    render_synced_images(
-                        rgb_uint8,
-                        analysis["visualization"],
-                        "Original",
-                        "Fire detection",
-                    )
-                    if record.has_fire and "segmentation" in analysis:
-                        with st.expander("📍 Where are the fires?", expanded=False):
-                            fire_mask_viz = create_fire_mask_visualization(
-                                analysis["segmentation"],
-                                dilate_pixels=3,
-                            )
-                            st.image(
-                                resize_for_display(fire_mask_viz, max_size=1000),
-                                width="stretch",
-                            )
-                elif "visualization" in analysis:
-                    viz = resize_for_display(analysis["visualization"])
-                    st.image(viz, width="stretch")
-                elif "image" in analysis:
-                    rgb = analysis["image"][:, :, [2, 1, 0]]
-                    rgb = np.clip(rgb * 3.0, 0, 1)
-                    rgb_uint8 = (rgb * 255).astype(np.uint8)
-                    st.image(resize_for_display(rgb_uint8), width="stretch")
-
-            with details_col:
-                st.markdown(f"**Scene:** {record.scene_id}")
-                st.markdown(f"**Date:** {record.satellite_datetime}")
-                st.markdown(f"**Location:** ({record.center_lon:.2f}, {record.center_lat:.2f})")
-                st.markdown(f"**Fire Detected:** {'Yes' if record.has_fire else 'No'}")
-                st.markdown(f"**Confidence:** {record.fire_confidence:.1%}")
-                st.markdown(f"**Coverage:** {record.fire_fraction:.2%}")
-
-                if st.button("Delete Analysis"):
-                    storage.delete_analysis(analysis_id)
-                    del st.session_state["view_analysis"]
-                    st.rerun()
-
+            display_data = _loaded_analysis_to_display_data(analysis)
+            if display_data:
+                render_analysis_results(display_data, from_history=True)
+            else:
+                st.error("Could not load analysis data. Some files may be missing.")
                 if st.button("Close"):
                     del st.session_state["view_analysis"]
                     st.rerun()
