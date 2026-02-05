@@ -37,6 +37,7 @@ env/
 # Raw satellite data
 wildfires-cems/
 data/
+patches/
 
 # Generated patches
 patches/

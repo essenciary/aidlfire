@@ -66,13 +66,13 @@ CLASS_NAMES_MAP = {
 
 def get_class_names(num_classes: int) -> tuple[str, ...]:
     """Get class names for the given number of classes.
-    
+
     Args:
         num_classes: Number of classes (2 for DEL, 5 for GRA)
-        
+
     Returns:
         Tuple of class names
-        
+
     Raises:
         ValueError: If num_classes is not 2 or 5
     """
@@ -86,7 +86,7 @@ def get_class_names(num_classes: int) -> tuple[str, ...]:
 # =============================================================================
 
 DEFAULT_PATCH_SIZE = 256
-DEFAULT_STRIDE_TRAIN = 128  # 50% overlap for training
+DEFAULT_STRIDE_TRAIN = 224  # patch overlap for training (256 - 224 = 32 pixels overlap)
 DEFAULT_STRIDE_INFERENCE = 256  # No overlap for inference
 DEFAULT_MAX_CLOUD_COVER = 0.5
 
@@ -101,17 +101,17 @@ DeviceType = Literal["auto", "cuda", "mps", "cpu"]
 def get_device(device: DeviceType = "auto") -> "torch.device":
     """
     Get the appropriate torch device.
-    
+
     Args:
         device: Device specification
             - "auto": Automatically select best available (CUDA > MPS > CPU)
             - "cuda": Use CUDA GPU
             - "mps": Use Apple Metal Performance Shaders
             - "cpu": Use CPU
-            
+
     Returns:
         torch.device instance
-        
+
     Raises:
         ImportError: If torch is not installed
         RuntimeError: If requested device is not available
@@ -121,7 +121,7 @@ def get_device(device: DeviceType = "auto") -> "torch.device":
             "PyTorch is required for device utilities. "
             "Install with: uv sync --extra train"
         )
-    
+
     if device == "auto":
         if torch.cuda.is_available():
             return torch.device("cuda")
@@ -143,13 +143,13 @@ def get_device(device: DeviceType = "auto") -> "torch.device":
 
 def get_device_name(device: "torch.device") -> str:
     """Get a human-readable name for the device.
-    
+
     Raises:
         ImportError: If torch is not installed
     """
     if not TORCH_AVAILABLE:
         raise ImportError("PyTorch is required for device utilities.")
-    
+
     if device.type == "cuda":
         return f"CUDA ({torch.cuda.get_device_name(device.index or 0)})"
     elif device.type == "mps":
@@ -180,10 +180,10 @@ def get_mask_colors(
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """
     Get colors and labels for mask visualization.
-    
+
     Args:
         mask_type: Type of mask ("DEL", "GRA", or "CM")
-        
+
     Returns:
         Tuple of (colors, labels)
     """
