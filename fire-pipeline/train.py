@@ -53,10 +53,23 @@ from constants import get_device, get_device_name, get_class_names
 from ray import tune
 
 
-def setup_wandb(config: dict, project: str, run_name: str | None = None):
+def setup_wandb(config: dict, project: str, run_name: str | None = None, wandb_dir: Path | None = None):
     """Initialize Weights & Biases logging."""
     try:
+        import os
+        import sys
+
+        # Avoid local ./wandb run cache shadowing the wandb package: ensure
+        # site-packages is searched before cwd when importing wandb
+        if wandb_dir is not None:
+            os.environ.setdefault("WANDB_DIR", str(wandb_dir))
+        site_packages = [p for p in sys.path if "site-packages" in p]
+        if site_packages:
+            sys.path.insert(0, site_packages[0])
         import wandb
+        if site_packages:
+            sys.path.pop(0)
+
         wandb.init(
             project=project,
             name=run_name,
@@ -374,6 +387,7 @@ def train(
     wandb_run_name: str | None = None,
     early_stopping_patience: int = 10,
     save_every: int = 5,
+    overwrite_output_dir: bool = False,
 ):
     """
     Main training function.
@@ -404,6 +418,12 @@ def train(
     """
     # Setup output directory
     output_dir = Path(output_dir)
+    if output_dir.exists():
+        if not overwrite_output_dir:
+            raise SystemExit(
+                f"Output directory already exists: {output_dir}\n"
+                "Remove it or pass --overwrite-output-dir to allow overwriting."
+            )
     output_dir.mkdir(parents=True, exist_ok=True)
     checkpoints_dir = output_dir / "checkpoints"
     checkpoints_dir.mkdir(exist_ok=True)
@@ -451,10 +471,10 @@ def train(
     with open(output_dir / "config.json", "w") as f:
         json.dump(config, f, indent=2)
 
-    # Setup W&B
+    # Setup W&B (use output_dir for wandb cache to avoid ./wandb shadowing the package)
     wandb = None
     if wandb_project:
-        wandb = setup_wandb(config, wandb_project, wandb_run_name)
+        wandb = setup_wandb(config, wandb_project, wandb_run_name, wandb_dir=output_dir / "wandb")
 
     # Compute class weights
     class_weights = None
@@ -709,8 +729,13 @@ def main():
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("./output"),
-        help="Directory for checkpoints and logs",
+        required=True,
+        help="Directory for checkpoints and logs (required)",
+    )
+    parser.add_argument(
+        "--overwrite-output-dir",
+        action="store_true",
+        help="Allow overwriting if output directory already exists",
     )
     parser.add_argument(
         "--num-classes",
@@ -794,6 +819,33 @@ def main():
         default="false",
         choices=["true", "false"],
         help="Run hyperparameter tuning with Ray Tune",
+    args = parser.parse_args()
+
+    # Run training
+    train(
+        patches_dir=args.patches_dir,
+        output_dir=args.output_dir,
+        num_classes=args.num_classes,
+        encoder_name=args.encoder,
+        architecture=args.architecture,
+        batch_size=args.batch_size,
+        num_epochs=args.epochs,
+        learning_rate=args.lr,
+        weight_decay=args.weight_decay,
+        use_class_weights=not args.no_class_weights,
+        use_focal_loss=args.focal_loss,
+        focal_gamma=args.focal_gamma,
+        use_weighted_sampling=args.weighted_sampling,
+        fire_sample_weight=args.fire_weight,
+        use_fire_augment=not args.no_fire_augment,
+        num_workers=args.num_workers,
+        device=args.device,
+        resume=args.resume,
+        wandb_project=args.project if args.wandb else None,
+        wandb_run_name=args.run_name,
+        early_stopping_patience=args.patience,
+        save_every=args.save_every,
+        overwrite_output_dir=args.overwrite_output_dir,
     )
     parser.add_argument(
         "--tune-samples",

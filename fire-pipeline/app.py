@@ -48,6 +48,11 @@ from inference import (
 
 # Configuration (can be set via environment variables)
 STORAGE_DIR = Path(os.environ.get("FIRE_STORAGE_DIR", "./cache"))
+# When MODELS_DIR is set, app shows dropdown of model subdirs; path = MODELS_DIR/<model>/checkpoints/<MODEL_NAME>.pt
+_models_dir_str = os.environ.get("FIRE_MODELS_DIR", "")
+MODELS_DIR = Path(_models_dir_str) if _models_dir_str else None
+MODEL_NAME = os.environ.get("FIRE_MODEL_NAME", "best_model")  # Checkpoint filename without .pt
+# Fallback when MODELS_DIR is not used
 MODEL_PATH = Path(os.environ.get("FIRE_MODEL_PATH", "./checkpoints/best_model.pt"))
 USE_MOCK_FETCHER = os.environ.get("FIRE_USE_MOCK", "true").lower() in ("true", "1", "yes")
 
@@ -59,11 +64,31 @@ def get_storage():
 
 
 @st.cache_resource
-def get_model():
-    """Load the fire detection model."""
-    if MODEL_PATH.exists():
-        return FireInferencePipeline(MODEL_PATH)
+def get_model(model_path: Path):
+    """Load the fire detection model from the given path."""
+    if model_path.exists():
+        return FireInferencePipeline(model_path)
     return None
+
+
+def _get_available_models() -> list[str]:
+    """List model names (subdirs) in MODELS_DIR that have checkpoints/<MODEL_NAME>.pt."""
+    if not MODELS_DIR or not MODELS_DIR.exists():
+        return []
+    models = []
+    for d in sorted(MODELS_DIR.iterdir()):
+        if d.is_dir():
+            ckpt = d / "checkpoints" / f"{MODEL_NAME}.pt"
+            if ckpt.exists():
+                models.append(d.name)
+    return models
+
+
+def _resolve_model_path(selected_model: str | None) -> Path:
+    """Resolve the model checkpoint path from MODELS_DIR + selected model, or fallback to MODEL_PATH."""
+    if MODELS_DIR and MODELS_DIR.exists() and selected_model:
+        return MODELS_DIR / selected_model / "checkpoints" / f"{MODEL_NAME}.pt"
+    return MODEL_PATH
 
 
 def run_inference_mock(image: SatelliteImage) -> InferenceResult:
@@ -230,8 +255,20 @@ def main():
 
         st.markdown("---")
 
-        # Model status
-        model = get_model()
+        # Model selection
+        available_models = _get_available_models()
+        if available_models:
+            selected = st.selectbox(
+                "Model",
+                options=available_models,
+                key="model_select",
+            )
+            effective_path = _resolve_model_path(selected)
+        else:
+            effective_path = _resolve_model_path(None)
+
+        st.session_state.effective_model_path = effective_path
+        model = get_model(effective_path)
         if model:
             st.success("Model loaded")
         else:
@@ -519,7 +556,8 @@ def run_analysis(
 ):
     """Fetch satellite data, run fire detection, store results in session state."""
     storage = get_storage()
-    model = get_model()
+    effective_path = st.session_state.get("effective_model_path", MODEL_PATH)
+    model = get_model(effective_path)
 
     with st.spinner("Fetching satellite imagery..."):
         fetcher = get_fetcher(use_mock=USE_MOCK_FETCHER)
