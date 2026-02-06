@@ -143,7 +143,7 @@ uv run python analyze_patches.py ./patches --plot
 ```bash
 cd fire-pipeline
 uv sync --extra train
-uv run python train.py --patches-dir ./patches --num-classes 2 --wandb
+uv run python train.py --patches-dir ./patches --output-dir ./output/run1 --num-classes 2 --wandb
 ```
 
 ## File Quick Reference
