@@ -527,8 +527,7 @@ def train(
     # Create model
     print("\nCreating model...")
     if architecture == "unet_scratch":
-        UNetScratch = _load_unet_scratch_model()
-        model = UNetScratch(in_channels=7, num_classes=num_classes, retainDim=True)
+        model = UNet(in_channels=7, num_classes=num_classes, retainDim=True)
     else:
         model = FireSegmentationModel(
             encoder_name=encoder_name,
@@ -870,6 +869,7 @@ def main():
         default="false",
         choices=["true", "false"],
         help="Run hyperparameter tuning with Ray Tune",
+    )
     args = parser.parse_args()
 
     # Run training
