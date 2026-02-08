@@ -8,7 +8,7 @@ for training fire detection/severity models.
 import argparse
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Iterator, Literal
+from typing import Iterator, Literal, Tuple
 
 import numpy as np
 import rasterio
@@ -64,6 +64,17 @@ class PatchMetadata:
             raise ValueError(f"burn_fraction must be in [0, 1], got {self.burn_fraction}")
 
 
+def _resolve_file(
+    directory: Path, base_name: str, suffix: str, extensions: Tuple[str, ...]
+) -> Path | None:
+    """Resolve first existing path base_name_suffix.ext in directory."""
+    for ext in extensions:
+        path = directory / f"{base_name}_{suffix}{ext}"
+        if path.exists():
+            return path
+    return None
+
+
 class PatchGenerator:
     """Generates patches from CEMS wildfire dataset."""
 
@@ -73,20 +84,27 @@ class PatchGenerator:
     def _load_image(self, image_path: Path) -> np.ndarray:
         """Load and preprocess satellite image.
 
+        Supports 12-band GeoTIFF (S2L2A) or 3-band PNG; always returns 7 channels.
+
         Returns:
             Array of shape (H, W, 7) with selected bands, clipped to [0, 1]
         """
         with rasterio.open(image_path) as src:
-            # Read all bands and select the ones we need
-            data = src.read()  # (12, H, W)
+            data = src.read()  # (C, H, W)
+            n_bands = data.shape[0]
 
-            # Select bands and transpose to (H, W, C)
-            selected = data[list(self.config.band_indices), :, :]  # (7, H, W)
+            if n_bands >= 12:
+                # Full S2L2A: select bands B02, B03, B04, B08, B8A, B11, B12
+                selected = data[list(self.config.band_indices), :, :]  # (7, H, W)
+            else:
+                # Fewer bands (e.g. 3-band PNG): use available and repeat last to get 7
+                need = 7
+                selected = np.stack(
+                    [data[min(i, n_bands - 1), :, :] for i in range(need)], axis=0
+                )
+
             selected = np.transpose(selected, (1, 2, 0))  # (H, W, 7)
-
-            # Clip to valid range
             selected = np.clip(selected, self.config.clip_min, self.config.clip_max)
-
             return selected.astype(np.float32)
 
     def _load_mask(self, mask_path: Path) -> np.ndarray:
@@ -180,35 +198,31 @@ class PatchGenerator:
         mask_type: Literal["DEL", "GRA"] = "DEL",
         mode: Literal["train", "inference"] = "train",
         skip_existing: bool = True,
-    ) -> list[PatchMetadata]:
+    ) -> tuple[list[PatchMetadata], int]:
         """Process a single image directory and extract patches.
 
         Args:
-            image_dir: Directory containing S2L2A.tif, DEL.tif, CM.tif, etc.
+            image_dir: Directory containing S2L2A (prefer .tif), DEL, CM (prefer .tif; .png fallback), etc.
             output_dir: Directory to save patches
             mask_type: "DEL" for binary or "GRA" for severity
             mode: "train" (50% overlap) or "inference" (no overlap)
             skip_existing: Skip patches that already exist (for resume support)
 
         Returns:
-            List of metadata for extracted patches
+            (metadata_list, skipped_count) for extracted patches
         """
-        # Find files
+        # Find files (support .tif, .tiff, and .png — Hugging Face dataset uses .png)
         base_name = image_dir.name
-        image_file = image_dir / f"{base_name}_S2L2A.tif"
-
-        # Handle both .tif and .tiff extensions
-        if not image_file.exists():
-            image_file = image_dir / f"{base_name}_S2L2A.tiff"
-
-        mask_file = image_dir / f"{base_name}_{mask_type}.tif"
-        cloud_file = image_dir / f"{base_name}_CM.tif"
+        # Prefer GeoTIFF (.tif/.tiff) for full 12-band S2L2A and georef; fall back to .png only if missing
+        image_file = _resolve_file(image_dir, base_name, "S2L2A", (".tif", ".tiff", ".png"))
+        mask_file = _resolve_file(image_dir, base_name, mask_type, (".tif", ".tiff", ".png"))
+        cloud_file = _resolve_file(image_dir, base_name, "CM", (".tif", ".tiff", ".png"))
 
         # Validate files exist
         for f, name in [(image_file, "image"), (mask_file, "mask"), (cloud_file, "cloud")]:
-            if not f.exists():
-                print(f"Warning: Missing {name} file: {f}")
-                return []
+            if f is None or not f.exists():
+                print(f"Warning: Missing {name} file in {image_dir}")
+                return [], 0
 
         # Load data
         image = self._load_image(image_file)
@@ -280,7 +294,14 @@ class PatchGenerator:
             total_skipped = 0
 
             # Find all image directories (EMSR*/AOI*/EMSR*_AOI*_*)
-            image_dirs = list(split_dir.glob("EMSR*/AOI*/EMSR*_AOI*_*"))
+            # Archives often extract to split/split/ (e.g. data/train/train/EMSR*)
+            search_dir = split_dir
+            nested_split = split_dir / split
+            if nested_split.exists() and nested_split.is_dir():
+                nested_dirs = list(nested_split.glob("EMSR*/AOI*/EMSR*_AOI*_*"))
+                if nested_dirs and not list(split_dir.glob("EMSR*/AOI*/EMSR*_AOI*_*")):
+                    search_dir = nested_split
+            image_dirs = list(search_dir.glob("EMSR*/AOI*/EMSR*_AOI*_*"))
 
             for i, image_dir in enumerate(image_dirs):
                 if not image_dir.is_dir():

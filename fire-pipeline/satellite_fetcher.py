@@ -189,6 +189,8 @@ class SatelliteFetcher:
         try:
             import rasterio
             from rasterio.windows import from_bounds
+            from rasterio.warp import transform_bounds
+            from rasterio.crs import CRS
         except ImportError:
             raise ImportError("rasterio is required for reading imagery")
 
@@ -207,8 +209,15 @@ class SatelliteFetcher:
             try:
                 with rasterio.open(href) as src:
                     if bbox:
+                        # Transform bbox from WGS84 to source CRS (Sentinel-2 is typically UTM)
+                        if src.crs and str(src.crs) != "EPSG:4326":
+                            read_bbox = transform_bounds(
+                                CRS.from_epsg(4326), src.crs, *bbox
+                            )
+                        else:
+                            read_bbox = bbox
                         # Read only the requested region
-                        window = from_bounds(*bbox, src.transform)
+                        window = from_bounds(*read_bbox, src.transform)
                         data = src.read(1, window=window)
                         transform = src.window_transform(window)
                     else:
@@ -238,6 +247,12 @@ class SatelliteFetcher:
 
         # Stack bands: (H, W, 7)
         image_data = np.stack(band_data, axis=-1)
+
+        if image_data.size == 0:
+            raise ValueError(
+                f"Fetched image is empty for bbox {bbox}. "
+                "The region may not intersect the scene. Try a larger region or different dates."
+            )
 
         # Normalize to 0-1 (Sentinel-2 L2A values are 0-10000)
         image_data = image_data.astype(np.float32) / 10000.0
