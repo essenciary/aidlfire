@@ -141,12 +141,13 @@ def train_yolo_baseline(
     verbose: bool = True,
 ) -> bool:
     """
-    Train YOLOv8 baseline model.
+    Train YOLOv8 baseline model ONLY (no encoder training).
     
     Returns:
         True if training succeeded, False otherwise
     """
-    # Build command
+    # Build command - MUST specify encoder to prevent training all encoders
+    # We use resnet18 as dummy since we only want YOLO, not segmentation
     cmd = [
         sys.executable,
         "train.py",
@@ -157,6 +158,7 @@ def train_yolo_baseline(
         "--epochs", str(epochs),
         "--num-workers", str(num_workers),
         "--device", device,
+        "--encoder", "resnet18",  # Required to prevent all-encoder training
         "--include-yolo",
     ]
     
@@ -192,12 +194,12 @@ def train_scratch_model(
     verbose: bool = True,
 ) -> bool:
     """
-    Train scratch model (binary classifier).
+    Train scratch model (binary classifier) ONLY (no encoder training).
     
     Returns:
         True if training succeeded, False otherwise
     """
-    # Build command
+    # Build command - MUST specify encoder to prevent training all encoders
     cmd = [
         sys.executable,
         "train.py",
@@ -207,6 +209,7 @@ def train_scratch_model(
         "--epochs", str(epochs),
         "--num-workers", str(num_workers),
         "--device", device,
+        "--encoder", "resnet18",  # Required to prevent all-encoder training
         "--include-scratch",
     ]
     
@@ -431,7 +434,9 @@ def main():
                 if not success:
                     failed.append(combo)
                     if not args.skip_errors:
-                        print(f"❌ Training failed. Stopping. Use --skip-errors to continue.")
+                        print(f"\n⚠️  NOTICE: Training failed, but models may still be saved.")
+                        print(f"     Use --skip-errors to continue training other models.")
+                        print(f"     This saves compute resources if you want to retry later.\n")
                         sys.exit(1)
     
     # Train YOLOv8 baseline
