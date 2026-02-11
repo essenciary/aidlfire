@@ -168,6 +168,12 @@ class FireInferencePipeline:
         Returns:
             Preprocessed image (H, W, 7) float32, normalized to 0-1
         """
+        if image.size == 0:
+            raise ValueError(
+                "Cannot process empty image. The satellite fetcher may have returned "
+                "empty data—check that the region intersects the scene."
+            )
+
         # Handle band selection
         if select_bands and image.shape[-1] == 12:
             image = image[:, :, list(BAND_INDICES)]
@@ -476,6 +482,30 @@ def create_visualization(
     blended = (blended * 255).astype(np.uint8)
 
     return blended
+
+
+def create_fire_mask_visualization(
+    segmentation: np.ndarray,
+    num_classes: int = 2,
+    dilate_pixels: int = 3,
+) -> np.ndarray:
+    """
+    Create a high-contrast fire mask for easy visibility of sparse detections.
+
+    Fire pixels: bright red. Background: dark grey. Optionally dilates fire
+    pixels so single-pixel detections are visible.
+
+    Returns:
+        RGB image (H, W, 3) uint8
+    """
+    fire_mask = segmentation > 0
+    if dilate_pixels > 0 and fire_mask.any():
+        from scipy.ndimage import binary_dilation
+        fire_mask = binary_dilation(fire_mask, iterations=dilate_pixels)
+
+    out = np.full((*segmentation.shape, 3), 40, dtype=np.uint8)  # Dark grey bg
+    out[fire_mask] = [255, 50, 50]  # Bright red for fire
+    return out
 
 
 if __name__ == "__main__":

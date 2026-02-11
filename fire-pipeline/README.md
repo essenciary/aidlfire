@@ -54,10 +54,11 @@ uv run python run_pipeline.py \
 # 4. (Optional) Analyze class distribution
 uv run python analyze_patches.py ./patches
 
-# 5. Train the model
-uv run python train.py --patches-dir ./patches --num-classes 2 --epochs 50
+# 5. Train the model (--output-dir is required)
+uv run python train.py --patches-dir ./patches --output-dir ./output/resnet34-unet --num-classes 2 --epochs 50
 
-# Model saved to: ./output/checkpoints/best_model.pt
+# Model saved to: ./output/resnet34-unet/checkpoints/best_model.pt
+# Use --overwrite-output-dir to allow overwriting an existing output directory
 ```
 
 **Both download and patch generation support resume**: If interrupted, just re-run the same command and it will skip already-completed work. Use `--force` to regenerate everything.
@@ -68,12 +69,16 @@ uv run python train.py --patches-dir ./patches --num-classes 2 --epochs 50
 # 1. Install app dependencies
 uv sync --extra app
 
-# 2a. With a trained model:
+# 2a. With a trained model (single model):
 mkdir -p checkpoints
 cp /path/to/best_model.pt ./checkpoints/
 uv run streamlit run app.py
 
-# 2b. Demo mode (no model needed, uses mock data):
+# 2b. With multiple models (dropdown in sidebar):
+# Set FIRE_MODELS_DIR to your output dir (e.g. ./output); app lists subdirs as models
+FIRE_MODELS_DIR=./output uv run streamlit run app.py
+
+# 2c. Demo mode (no model needed, uses mock data):
 uv run streamlit run app.py
 ```
 
@@ -348,15 +353,15 @@ uv run python run_pipeline.py \
 # 5. Analyze class distribution (optional but recommended)
 uv run python analyze_patches.py ./patches --plot
 
-# 6. Train the model
+# 6. Train the model (--output-dir is required)
 uv run python train.py \
     --patches-dir ./patches \
-    --output-dir ./output \
+    --output-dir ./output/resnet34-unet \
     --num-classes 2 \
     --epochs 50 \
     --wandb  # Optional: enable W&B logging
 
-# 7. Model checkpoint saved to: ./output/checkpoints/best_model.pt
+# 7. Model checkpoint saved to: ./output/resnet34-unet/checkpoints/best_model.pt
 ```
 
 **Note:** Both download and patch generation support resume. If interrupted (e.g., VM preemption), re-run the same command and it will continue from where it left off.
@@ -991,7 +996,8 @@ uv run python train.py --help
 
 Key options:
   --patches-dir PATH      Patches directory (default: ./patches)
-  --output-dir PATH       Output for checkpoints (default: ./output)
+  --output-dir PATH       Output for checkpoints (required)
+  --overwrite-output-dir  Allow overwriting if output dir exists
   --num-classes {2,5}     2=binary DEL, 5=severity GRA
   --encoder NAME          resnet34, efficientnet-b0, etc.
   --architecture ARCH     unet, unetplusplus, deeplabv3plus
@@ -1134,13 +1140,15 @@ The app will open in your browser at `http://localhost:8501`.
 
 ### App Configuration
 
-Edit the configuration at the top of `app.py`:
+Set via environment variables (or edit the top of `app.py`):
 
-```python
-STORAGE_DIR = Path("./cache")           # Where to cache data
-MODEL_PATH = Path("./checkpoints/best_model.pt")  # Trained model
-USE_MOCK_FETCHER = True                 # Set False for real satellite data
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FIRE_STORAGE_DIR` | `./cache` | Where to cache data |
+| `FIRE_MODELS_DIR` | (unset) | Base dir for multiple models; when set, sidebar shows a dropdown of subdirs (e.g. `./output` → `./output/resnet34-unet/checkpoints/`) |
+| `FIRE_MODEL_NAME` | `best_model` | Checkpoint filename without `.pt` (e.g. `best_model` → `best_model.pt`) |
+| `FIRE_MODEL_PATH` | `./checkpoints/best_model.pt` | Fallback when `FIRE_MODELS_DIR` is not used |
+| `FIRE_USE_MOCK` | `true` | Set `false` for real Sentinel-2 imagery |
 
 ### Using Real Satellite Data
 
