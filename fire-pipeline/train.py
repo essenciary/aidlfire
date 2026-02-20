@@ -818,7 +818,8 @@ def main():
         type=str,
         default="false",
         choices=["true", "false"],
-        help="Run hyperparameter tuning with Ray Tune",
+        help="Run hyperparameter tuning with Ray Tune"
+    )
     args = parser.parse_args()
 
     # Run training
