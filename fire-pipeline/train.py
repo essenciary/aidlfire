@@ -376,6 +376,281 @@ def train_scratch_classifier(
     return best_val_loss
 
 
+def train_unet_scratch_segmentation(
+    patches_dir: Path,
+    output_dir: Path,
+    num_classes: int = 2,
+    batch_size: int = 16,
+    num_epochs: int = 50,
+    learning_rate: float = 1e-4,
+    weight_decay: float = 1e-4,
+    use_class_weights: bool = True,
+    use_focal_loss: bool = False,
+    focal_gamma: float = 2.0,
+    use_weighted_sampling: bool = False,
+    fire_sample_weight: float = 5.0,
+    use_fire_augment: bool = True,
+    num_workers: int = 4,
+    device: str = "auto",
+    wandb_project: str | None = None,
+    wandb_run_name: str | None = None,
+    use_tensorboard: bool = True,
+    early_stopping_patience: int = 10,
+    save_every: int = 5,
+    overwrite_output_dir: bool = False,
+) -> float:
+    """
+    Baseline training loop for the U-Net from scratch (segmentation).
+    This is a baseline like YOLO or ScratchFireModel, not part of pretrained encoder sweeps.
+
+    Returns:
+        best_metric (best fire IoU)
+    """
+    # Setup output directory
+    output_dir = Path(output_dir)
+    if output_dir.exists():
+        if not overwrite_output_dir:
+            raise SystemExit(
+                f"Output directory already exists: {output_dir}\n"
+                "Remove it or pass --overwrite-output-dir to allow overwriting."
+            )
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    checkpoints_dir = output_dir / "checkpoints"
+    checkpoints_dir.mkdir(exist_ok=True)
+
+    metric_logger = MetricLogger(output_dir=output_dir)
+
+    # Setup device
+    device_t = get_device(device)
+    device_label = get_device_name(device_t)
+
+    print(f"\n{'='*60}")
+    print(f"  U-NET FROM SCRATCH (BASELINE SEGMENTATION)")
+    print(f"{'='*60}")
+    print(f"  Device: {device_label}")
+    print(f"  Patches: {patches_dir}")
+    print(f"  Output: {output_dir}")
+    print(f"  Classes: {num_classes}")
+    print(f"{'='*60}\n")
+
+    class_names = list(get_class_names(num_classes))
+
+    # Config for logging
+    config = {
+        "patches_dir": str(patches_dir),
+        "num_classes": num_classes,
+        "model": "UNetScratch",
+        "in_channels": 7,
+        "batch_size": batch_size,
+        "num_epochs": num_epochs,
+        "learning_rate": learning_rate,
+        "weight_decay": weight_decay,
+        "use_class_weights": use_class_weights,
+        "use_focal_loss": use_focal_loss,
+        "focal_gamma": focal_gamma,
+        "use_weighted_sampling": use_weighted_sampling,
+        "fire_sample_weight": fire_sample_weight,
+        "use_fire_augment": use_fire_augment,
+        "device": str(device_t),
+    }
+
+    # Save config
+    with open(output_dir / "config.json", "w") as f:
+        json.dump(config, f, indent=2)
+
+    # Setup W&B
+    wandb = None
+    if wandb_project:
+        wandb = setup_wandb(config, wandb_project, wandb_run_name, wandb_dir=output_dir / "wandb")
+
+    # Setup TensorBoard
+    writer = None
+    if use_tensorboard:
+        writer = setup_tensorboard(output_dir)
+        print(f"\nTensorBoard logging enabled: {output_dir / 'tensorboard'}")
+        print(f"  View with: tensorboard --logdir={output_dir / 'tensorboard'}")
+
+    # Compute class weights
+    class_weights = None
+    if use_class_weights:
+        print("Computing class weights...")
+        weights = compute_class_weights(patches_dir / "train", num_classes=num_classes)
+        class_weights = torch.tensor(weights, device=device_t)
+        print(f"Class weights: {weights}")
+
+    # Data
+    print("\nSetting up data loaders...")
+    fire_augment = get_strong_augmentation() if use_fire_augment else None
+
+    data_module = WildfireDataModule(
+        patches_root=patches_dir,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        train_augment=get_training_augmentation(),
+        fire_augment=fire_augment,
+        use_weighted_sampling=use_weighted_sampling,
+        fire_sample_weight=fire_sample_weight,
+    )
+    train_loader = data_module.train_dataloader()
+    val_loader = data_module.val_dataloader()
+
+    print(f"Training samples: {len(data_module.train_dataset)}")
+    print(f"Validation samples: {len(data_module.val_dataset)}")
+
+    # Model (UNet from scratch)
+    print("\nCreating scratch U-Net model...")
+    model = UNet(in_channels=7, num_classes=num_classes, retainDim=True).to(device_t)
+
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Total parameters: {total_params:,}")
+    print(f"Trainable parameters: {trainable_params:,}")
+
+    # Loss
+    if use_focal_loss:
+        print(f"\nUsing Focal Loss (gamma={focal_gamma})")
+        criterion = CombinedLoss(
+            ce_weight=0.5,
+            dice_weight=0.5,
+            class_weights=class_weights,
+            focal_gamma=focal_gamma,
+        )
+    else:
+        print("\nUsing CrossEntropy + Dice Loss")
+        criterion = CombinedLoss(
+            ce_weight=0.5,
+            dice_weight=0.5,
+            class_weights=class_weights,
+        )
+
+    # Optim + scheduler
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="max", factor=0.5, patience=5
+    )
+
+    # Metrics
+    train_metrics = CombinedMetrics(num_classes=num_classes, class_names=class_names)
+    val_metrics = CombinedMetrics(num_classes=num_classes, class_names=class_names)
+
+    # Training loop
+    print("\n" + "=" * 60)
+    print("  STARTING TRAINING")
+    print("=" * 60 + "\n")
+
+    best_metric = 0.0
+    epochs_without_improvement = 0
+
+    for epoch in range(num_epochs):
+        train_results = train_epoch(
+            model, train_loader, criterion, optimizer, device_t, epoch, train_metrics
+        )
+        val_results = validate_epoch(
+            model, val_loader, criterion, device_t, epoch, val_metrics
+        )
+
+        scheduler.step(val_results["fire_iou"])
+
+        print(f"\nEpoch {epoch} Results:")
+        print(f"  Train Loss: {train_results['loss']:.4f}")
+        print(f"  Val Loss: {val_results['loss']:.4f}")
+        print(f"  Val Fire IoU: {val_results['fire_iou']:.4f}")
+        print(f"  Val Fire Recall: {val_results['fire_recall']:.4f}")
+        print(f"  Val Detection F1: {val_results['detection_f1']:.4f}")
+
+        metric_logger.log(epoch, "train", train_results)
+        metric_logger.log(epoch, "val", val_results)
+
+        if writer:
+            writer.add_scalar("train/loss", train_results["loss"], epoch)
+            writer.add_scalar("train/fire_iou", train_results["fire_iou"], epoch)
+            writer.add_scalar("train/detection_f1", train_results["detection_f1"], epoch)
+
+            writer.add_scalar("val/loss", val_results["loss"], epoch)
+            writer.add_scalar("val/fire_iou", val_results["fire_iou"], epoch)
+            writer.add_scalar("val/fire_recall", val_results["fire_recall"], epoch)
+            writer.add_scalar("val/detection_f1", val_results["detection_f1"], epoch)
+
+            writer.add_scalar("lr", optimizer.param_groups[0]["lr"], epoch)
+
+            if "ce_loss" in train_results:
+                writer.add_scalar("train/ce_loss", train_results["ce_loss"], epoch)
+            if "dice_loss" in train_results:
+                writer.add_scalar("train/dice_loss", train_results["dice_loss"], epoch)
+
+        if wandb:
+            wandb.log({
+                "epoch": epoch,
+                "train/loss": train_results["loss"],
+                "train/fire_iou": train_results["fire_iou"],
+                "train/detection_f1": train_results["detection_f1"],
+                "val/loss": val_results["loss"],
+                "val/fire_iou": val_results["fire_iou"],
+                "val/fire_recall": val_results["fire_recall"],
+                "val/detection_f1": val_results["detection_f1"],
+                "lr": optimizer.param_groups[0]["lr"],
+            })
+
+        # Save best model (by fire IoU)
+        if val_results["fire_iou"] > best_metric:
+            best_metric = float(val_results["fire_iou"])
+            epochs_without_improvement = 0
+
+            save_checkpoint(
+                model=model,
+                optimizer=optimizer,
+                epoch=epoch,
+                metrics=val_results,
+                path=checkpoints_dir / "best_model.pt",
+                config=config,
+            )
+            print(f"  ✓ New best scratch U-Net saved (fire_iou: {best_metric:.4f})")
+        else:
+            epochs_without_improvement += 1
+
+        # Periodic checkpoint
+        if (epoch + 1) % save_every == 0:
+            save_checkpoint(
+                model=model,
+                optimizer=optimizer,
+                epoch=epoch,
+                metrics=val_results,
+                path=checkpoints_dir / f"checkpoint_epoch_{epoch}.pt",
+                config=config,
+            )
+
+        # Early stopping
+        if epochs_without_improvement >= early_stopping_patience:
+            print(f"\nEarly stopping: no improvement for {early_stopping_patience} epochs")
+            break
+
+    # Final checkpoint
+    save_checkpoint(
+        model=model,
+        optimizer=optimizer,
+        epoch=epoch,
+        metrics=val_results,
+        path=checkpoints_dir / "final_model.pt",
+        config=config,
+    )
+
+    print("\n" + "=" * 60)
+    print("  TRAINING COMPLETE")
+    print("=" * 60)
+    print(f"  Best Fire IoU: {best_metric:.4f}")
+    print(f"  Checkpoints saved to: {checkpoints_dir}")
+
+    if writer:
+        writer.flush()
+        writer.close()
+
+    if wandb:
+        wandb.finish()
+
+    return best_metric
+
+
 def train(
     patches_dir: Path,
     output_dir: Path,
@@ -529,10 +804,7 @@ def train(
 
     # Create model
     print("\nCreating model...")
-    if architecture == "unet_scratch":
-        model = UNet(in_channels=7, num_classes=num_classes, retainDim=True)
-    else:
-        model = FireSegmentationModel(
+    model = FireSegmentationModel(
             encoder_name=encoder_name,
             num_classes=num_classes,
             in_channels=7,
@@ -815,7 +1087,7 @@ def main():
         "--architecture",
         type=str,
         default="unet",
-        choices=["unet", "unetplusplus", "deeplabv3plus", "unet_scratch"],
+        choices=["unet", "unetplusplus", "deeplabv3plus"],
         help="Segmentation architecture",
     )
 
@@ -832,6 +1104,14 @@ def main():
         action="store_true",
         help="Also train the ScratchFireModel (binary classifier) using 7-channel patches",
     )
+
+    # U-Net scratch model arguments
+    parser.add_argument(
+        "--include-unet-scratch",
+        action="store_true",
+        help="Also train The U-Net from scracth model. This one does not use pretrained encoders",
+    )
+
 
     # Training arguments
     parser.add_argument("--batch-size", type=int, default=16, help="Batch size")
@@ -1040,7 +1320,7 @@ def main():
         results = {}
 
     # Skip encoder training if ONLY special models (YOLO/scratch) are requested
-    skip_encoders = (args.include_yolo or args.include_scratch) and args.encoder == "resnet18"
+    skip_encoders = (args.include_yolo or args.include_scratch or args.include_unet_scratch) and args.encoder == "resnet18"
     
     # Runing bag of models
     # SMP models
@@ -1094,7 +1374,7 @@ def main():
 
         metrics = export_yolo_det7_dataset(
             patches_dir=args.patches_dir,
-            export_root=args.output_dir / "yolo_det_7ch",
+            export_root=args.output_dir,
             num_classes=args.num_classes,
             export_cfg=ExportDet7Cfg(
                 channels=7,
@@ -1121,7 +1401,7 @@ def main():
 
         best_val_loss = train_scratch_classifier(
             patches_dir=args.patches_dir,
-            output_dir=args.output_dir / "scratch_model",
+            output_dir=args.output_dir,
             batch_size=args.batch_size,
             num_epochs=args.epochs,
             learning_rate=args.lr,
@@ -1131,6 +1411,37 @@ def main():
         )
         print(f"Scratch best val loss: {best_val_loss:.4f}")
 
+    # U-Net from scratch (segmentation) baseline
+    if args.include_unet_scratch:
+        print("\n" + "#" * 80)
+        print("TRAINING U-NET FROM SCRATCH (SEGMENTATION BASELINE)")
+        print("#" * 80 + "\n")
+
+        best_metric = train_unet_scratch_segmentation(
+            patches_dir=args.patches_dir,
+            output_dir=args.output_dir,
+            num_classes=args.num_classes,
+            batch_size=args.batch_size,
+            num_epochs=args.epochs,
+            learning_rate=args.lr,
+            weight_decay=args.weight_decay,
+            use_class_weights=not args.no_class_weights,
+            use_focal_loss=args.focal_loss,
+            focal_gamma=args.focal_gamma,
+            use_weighted_sampling=args.weighted_sampling,
+            fire_sample_weight=args.fire_weight,
+            use_fire_augment=not args.no_fire_augment,
+            num_workers=args.num_workers,
+            device=args.device,
+            wandb_project=(args.project if args.wandb else None),
+            wandb_run_name=(args.run_name or f"unet-scratch-c{args.num_classes}"),
+            use_tensorboard=args.tensorboard,
+            early_stopping_patience=args.patience,
+            save_every=args.save_every,
+            overwrite_output_dir=args.overwrite_output_dir,
+        )
+
+        print(f"Scratch U-Net best fire IoU: {best_metric:.4f}")
 
 if __name__ == "__main__":
     main()

@@ -9,12 +9,13 @@ This script trains all combinations of:
 - Baseline Models:
   - YOLOv8 (optional, detection/segmentation)
   - Scratch Model (optional, binary classifier)
+  - Scratch U-Net Model (optional, segmentation)
 
 Each training run uses a unique output directory with timestamps to prevent overwriting.
 
 Usage:
     uv run python train_all_models.py --patches-dir ./patches --num-classes 2
-    uv run python train_all_models.py --patches-dir ./patches --num-classes 2 --include-yolo --include-scratch
+    uv run python train_all_models.py --patches-dir ./patches --num-classes 2 --include-yolo --include-scratch --include-unet-scratch
     uv run python train_all_models.py --patches-dir ./patches --wandb --project fire-detection
 
 Output:
@@ -27,6 +28,9 @@ Output:
             checkpoints/
             logs/
         scratch_model/
+            checkpoints/
+            logs/
+        scratch_unet_model/
             checkpoints/
             logs/
 """
@@ -232,6 +236,58 @@ def train_scratch_model(
         print(f"❌ Training failed for Scratch model: {e}")
         return False
 
+def train_unet_scratch_model(
+    patches_dir: Path,
+    output_dir: Path,
+    num_classes: int,
+    batch_size: int,
+    epochs: int,
+    num_workers: int,
+    device: str,
+    wandb_enabled: bool,
+    wandb_project: str,
+    verbose: bool = True,
+) -> bool:
+    """
+    Train U-Net scratch model (segmentation) ONLY (no encoder training).
+    
+    Returns:
+        True if training succeeded, False otherwise
+    """
+    # Build command - MUST specify encoder to prevent training all encoders
+    cmd = [
+        sys.executable,
+        "train.py",
+        "--patches-dir", str(patches_dir),
+        "--output-dir", str(output_dir),
+        "--num-classes", str(num_classes),
+        "--batch-size", str(batch_size),
+        "--epochs", str(epochs),
+        "--num-workers", str(num_workers),
+        "--device", device,
+        "--encoder", "resnet18",  # Required to prevent all-encoder training
+        "--include-unet-scratch",
+    ]
+    
+    if wandb_enabled:
+        cmd.append("--wandb")
+        cmd.extend(["--project", wandb_project])
+        cmd.extend(["--run-name", "scratch-segmentation"])
+    
+    if verbose:
+        print(f"\n{'='*80}")
+        print(f"Training U-Net Scratch Model (Segmentation)")
+        print(f"Output: {output_dir}")
+        print(f"{'='*80}\n")
+    
+    # Run training
+    try:
+        result = subprocess.run(cmd, cwd=Path(__file__).parent, check=True)
+        return result.returncode == 0
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Training failed for U-Net Scratch Model: {e}")
+        return False
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -306,9 +362,14 @@ def main():
         help="Include scratch model (binary classifier) training",
     )
     parser.add_argument(
+        "--include-unet-scratch",
+        action="store_true",
+        help="Include U-Net scratch model (segmentation) training",
+    )
+    parser.add_argument(
         "--segmentation-only",
         action="store_true",
-        help="Train only segmentation models (skip YOLO and scratch)",
+        help="Train only segmentation models (skip YOLO and scratches)",
     )
     
     # Control arguments
@@ -358,6 +419,8 @@ def main():
         total_combinations += 1
     if args.include_scratch:
         total_combinations += 1
+    if args.include_unet_scratch:
+        total_combinations += 1
     
     # Print summary
     print(f"\n{'='*80}")
@@ -370,6 +433,8 @@ def main():
         print(f"YOLOv8 baseline: YES")
     if args.include_scratch:
         print(f"Scratch model: YES")
+    if args.include_unet_scratch:
+        print(f"Scratch U-Net model: YES")    
     print(f"Total models: {total_combinations}")
     print(f"Patches dir: {args.patches_dir}")
     print(f"Output base dir: {args.output_dir}")
@@ -511,6 +576,44 @@ def main():
             results["scratch-classifier"] = "✅ success" if success else "❌ failed"
             if not success:
                 failed.append("scratch-classifier")
+                if not args.skip_errors:
+                    print(f"❌ Training failed. Stopping. Use --skip-errors to continue.")
+                    sys.exit(1)
+
+    # Train U-Net scratch model
+    if args.include_unet_scratch and not args.segmentation_only:
+        print("\n\nSCRATCH U-NET MODEL (SEGMENTATION)")
+        print("-" * 80)
+        output_dir = args.output_dir / f"training_run_{timestamp}" / "unet_scratch_model"
+        
+        print(f"\n[{len(results)+1}/{total_combinations}] scratch-segmentation")
+        
+        if args.dry_run:
+            cmd = [
+                "python train.py",
+                f"--output-dir {output_dir}",
+                f"--patches-dir {args.patches_dir}",
+                f"--batch-size {args.batch_size}",
+                f"--epochs {args.epochs}",
+                "--include-unet-scratch",
+            ]
+            print(f"Command: {' '.join(cmd)}\n")
+            results["scratch-segmentation"] = "dry-run"
+        else:
+            success = train_unet_scratch_model(
+                patches_dir=args.patches_dir,
+                output_dir=output_dir,
+                num_classes=args.num_classes,
+                batch_size=args.batch_size,
+                epochs=args.epochs,
+                num_workers=args.num_workers,
+                device=args.device,
+                wandb_enabled=args.wandb,
+                wandb_project=args.project,
+            )
+            results["scratch-segmentation"] = "✅ success" if success else "❌ failed"
+            if not success:
+                failed.append("scratch-segmentation")
                 if not args.skip_errors:
                     print(f"❌ Training failed. Stopping. Use --skip-errors to continue.")
                     sys.exit(1)
