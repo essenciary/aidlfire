@@ -52,7 +52,10 @@ from unet_scratch import UNet
 from metrics import CombinedMetrics
 from constants import get_device, get_device_name, get_class_names
 
-from ray import tune
+try:
+    from ray import tune
+except ImportError:
+    tune = None
 
 
 def setup_wandb(config: dict, project: str, run_name: str | None = None, wandb_dir: Path | None = None):
@@ -869,34 +872,6 @@ def main():
         default="false",
         choices=["true", "false"],
         help="Run hyperparameter tuning with Ray Tune",
-    args = parser.parse_args()
-
-    # Run training
-    train(
-        patches_dir=args.patches_dir,
-        output_dir=args.output_dir,
-        num_classes=args.num_classes,
-        encoder_name=args.encoder,
-        architecture=args.architecture,
-        batch_size=args.batch_size,
-        num_epochs=args.epochs,
-        learning_rate=args.lr,
-        weight_decay=args.weight_decay,
-        use_class_weights=not args.no_class_weights,
-        use_focal_loss=args.focal_loss,
-        focal_gamma=args.focal_gamma,
-        use_weighted_sampling=args.weighted_sampling,
-        fire_sample_weight=args.fire_weight,
-        use_fire_augment=not args.no_fire_augment,
-        num_workers=args.num_workers,
-        device=args.device,
-        resume=args.resume,
-        wandb_project=args.project if args.wandb else None,
-        wandb_run_name=args.run_name,
-        use_tensorboard=args.tensorboard,
-        early_stopping_patience=args.patience,
-        save_every=args.save_every,
-        overwrite_output_dir=args.overwrite_output_dir,
     )
     parser.add_argument(
         "--tune-samples",
@@ -912,12 +887,12 @@ def main():
         help="Tuning strategy: random search or small grid",
     )
     parser.add_argument(
-    "--tune-target",
-    type=str,
-    default="seg",
-    choices=["seg", "scratch"],
-    help="What to tune: segmentation models (seg) or scratch model (scratch)",
-)
+        "--tune-target",
+        type=str,
+        default="seg",
+        choices=["seg", "scratch"],
+        help="What to tune: segmentation models (seg) or scratch model (scratch)",
+    )
 
     args = parser.parse_args()
     train_all_encoders = args.all_encoders == "true"
@@ -927,6 +902,10 @@ def main():
 
     # Hyperparameter tuning
     if args.tune == "true":
+        if tune is None:
+            print("❌ Ray Tune not available. Install with: pip install 'ray[tune]'")
+            sys.exit(1)
+        
         if args.tune_target == "scratch":
             search_space = {
                 "learning_rate": tune.loguniform(5e-5, 5e-4),
@@ -1060,45 +1039,49 @@ def main():
         wandb_project = args.project if args.wandb else None
         results = {}
 
+    # Skip encoder training if ONLY special models (YOLO/scratch) are requested
+    skip_encoders = (args.include_yolo or args.include_scratch) and args.encoder == "resnet18"
+    
     # Runing bag of models
     # SMP models
-    for encoder in encoders_to_train:
-        encoder_output_dir = args.output_dir / f"encoder_{encoder}"
+    if not skip_encoders:
+        for encoder in encoders_to_train:
+            encoder_output_dir = args.output_dir / f"encoder_{encoder}"
 
-        run_name = args.run_name or f"{encoder}-{args.architecture}-c{args.num_classes}"
+            run_name = args.run_name or f"{encoder}-{args.architecture}-c{args.num_classes}"
 
-        print(f"\n\n{'#' * 80}")
-        print(f"TRAINING ENCODER: {encoder}")
-        print(f"OUTPUT DIR: {encoder_output_dir}")
-        print(f"{'#' * 80}\n")
+            print(f"\n\n{'#' * 80}")
+            print(f"TRAINING ENCODER: {encoder}")
+            print(f"OUTPUT DIR: {encoder_output_dir}")
+            print(f"{'#' * 80}\n")
 
 
-        best_metric = train(
-            patches_dir=args.patches_dir,
-            output_dir=encoder_output_dir,
-            num_classes=args.num_classes,
-            encoder_name=encoder,
-            architecture=args.architecture,
-            batch_size=args.batch_size,
-            num_epochs=args.epochs,
-            learning_rate=args.lr,
-            weight_decay=args.weight_decay,
-            use_class_weights=not args.no_class_weights,
-            use_focal_loss=args.focal_loss,
-            focal_gamma=args.focal_gamma,
-            use_weighted_sampling=args.weighted_sampling,
-            fire_sample_weight=args.fire_weight,
-            use_fire_augment=not args.no_fire_augment,
-            num_workers=args.num_workers,
-            device=args.device,
-            resume=None if train_all_encoders else args.resume,
-            wandb_project=wandb_project,
-            wandb_run_name=run_name,
-            early_stopping_patience=args.patience,
-            save_every=args.save_every,
-        )
+            best_metric = train(
+                patches_dir=args.patches_dir,
+                output_dir=encoder_output_dir,
+                num_classes=args.num_classes,
+                encoder_name=encoder,
+                architecture=args.architecture,
+                batch_size=args.batch_size,
+                num_epochs=args.epochs,
+                learning_rate=args.lr,
+                weight_decay=args.weight_decay,
+                use_class_weights=not args.no_class_weights,
+                use_focal_loss=args.focal_loss,
+                focal_gamma=args.focal_gamma,
+                use_weighted_sampling=args.weighted_sampling,
+                fire_sample_weight=args.fire_weight,
+                use_fire_augment=not args.no_fire_augment,
+                num_workers=args.num_workers,
+                device=args.device,
+                resume=None if train_all_encoders else args.resume,
+                wandb_project=wandb_project,
+                wandb_run_name=run_name,
+                early_stopping_patience=args.patience,
+                save_every=args.save_every,
+            )
 
-        results[encoder] = best_metric
+            results[encoder] = best_metric
 
     # YOLOv8 DETECTION (7-CHANNEL) baseline
     if args.include_yolo:
