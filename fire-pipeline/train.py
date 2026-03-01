@@ -417,6 +417,10 @@ def train(
             class_weights=class_weights,
         )
 
+    # Dual-head: binary head uses 2 classes, so criterion must have no weights or 2-class weights
+    if use_dual_head:
+        criterion = CombinedLoss(ce_weight=0.5, dice_weight=0.5, class_weights=None)
+
     # Setup optimizer and scheduler
     optimizer = torch.optim.AdamW(
         model.parameters(),
