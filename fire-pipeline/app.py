@@ -533,12 +533,12 @@ def _render_analysis_filters() -> None:
 
     st.markdown("---")
     if st.button("🛰️ Fetch & Analyze", type="primary", use_container_width=True):
-        run_analysis(
+        if run_analysis(
             bbox=bbox,
             date_range=(start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")),
             max_cloud_cover=max_cloud,
-        )
-        st.rerun()
+        ):
+            st.rerun()
 
 
 def render_new_analysis():
@@ -554,8 +554,12 @@ def run_analysis(
     bbox: tuple[float, float, float, float],
     date_range: tuple[str, str],
     max_cloud_cover: float,
-):
-    """Fetch satellite data, run fire detection, store results in session state."""
+) -> bool:
+    """Fetch satellite data, run fire detection, store results in session state.
+
+    Returns:
+        True if analysis completed and results were stored, False if fetch failed or error.
+    """
     storage = get_storage()
     effective_path = st.session_state.get("effective_model_path", MODEL_PATH)
     model = get_model(effective_path)
@@ -571,11 +575,11 @@ def run_analysis(
             )
         except Exception as e:
             st.error(f"Failed to fetch imagery: {e}")
-            return
+            return False
 
         if image is None:
             st.warning("No suitable imagery found for the selected region and date range.")
-            return
+            return False
 
     # Run inference
     with st.spinner("Running fire detection..."):
@@ -609,6 +613,7 @@ def run_analysis(
         "visualization": visualization,
         "analysis_id": analysis_id,
     }
+    return True
 
 
 def _loaded_analysis_to_display_data(analysis: dict) -> dict | None:
@@ -741,7 +746,11 @@ def render_analysis_results(data: dict, from_history: bool = False) -> None:
     with col1:
         st.metric("Fire Detected", "🔥 Yes" if result.has_fire else "✅ No")
     with col2:
-        st.metric("Confidence", f"{result.fire_confidence:.1%}")
+        st.metric(
+            "Peak fire prob.",
+            f"{result.fire_confidence:.1%}",
+            help="Maximum fire probability over all pixels (low when no fire detected).",
+        )
     with col3:
         st.metric("Fire Coverage", f"{result.fire_fraction:.2%}")
     with col4:
