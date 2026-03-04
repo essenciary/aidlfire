@@ -191,6 +191,9 @@ def train_scratch_model(
     output_dir: Path,
     batch_size: int,
     epochs: int,
+    epochs: int,
+    learning_rate: float,
+    weight_decay: float,
     num_workers: int,
     device: str,
     wandb_enabled: bool,
@@ -211,6 +214,9 @@ def train_scratch_model(
         "--output-dir", str(output_dir),
         "--batch-size", str(batch_size),
         "--epochs", str(epochs),
+        "--epochs", str(epochs),
+        "--lr", str(learning_rate),
+        "--weight-decay", str(weight_decay),
         "--num-workers", str(num_workers),
         "--device", device,
         "--encoder", "resnet18",  # Required to prevent all-encoder training
@@ -220,7 +226,7 @@ def train_scratch_model(
     if wandb_enabled:
         cmd.append("--wandb")
         cmd.extend(["--project", wandb_project])
-        cmd.extend(["--run-name", "scratch-classifier"])
+        cmd.extend(["--run-name", f"scratch-classifier-lr-{learning_rate}-wd-{weight_decay}"])
     
     if verbose:
         print(f"\n{'='*80}")
@@ -386,6 +392,7 @@ def main():
     
     args = parser.parse_args()
     
+    print("PATCHES ",args.patches_dir)
     # Determine which encoders/architectures to train
     encoders = ENCODERS
     architectures = ARCHITECTURES

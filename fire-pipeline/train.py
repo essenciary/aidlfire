@@ -268,6 +268,8 @@ def train_scratch_classifier(
     dropout: float = 0.3,
     pos_weight: float | None = None,
     report_to_tune: bool = False,
+    wandb_project: str | None = None,
+    wandb_run_name: str | None = None,
 ):
 
     """
@@ -280,6 +282,21 @@ def train_scratch_classifier(
     checkpoints_dir.mkdir(parents=True, exist_ok=True)
 
     device_t = get_device(device)
+
+    wandb = None
+    if wandb_project:
+        config = {
+            "model": "ScratchFireModel",
+            "patches_dir": str(patches_dir),
+            "batch_size": batch_size,
+            "num_epochs": num_epochs,
+            "learning_rate": learning_rate,
+            "weight_decay": weight_decay,
+            "device": str(device_t),
+            "dropout": dropout,
+            "pos_weight": pos_weight,
+        }
+        wandb = setup_wandb(config, wandb_project, wandb_run_name, wandb_dir=output_dir / "wandb")
 
     # Data
     dm = WildfireDataModule(
@@ -309,6 +326,7 @@ def train_scratch_classifier(
     for epoch in range(num_epochs):
         model.train()
         train_loss = 0.0
+        train_acc = train_prec = train_rec = train_f1 = 0.0
         n = 0
 
         for images, masks in tqdm(train_loader, desc=f"Scratch Epoch {epoch} [Train]"):
@@ -324,13 +342,25 @@ def train_scratch_classifier(
             loss.backward()
             optimizer.step()
 
+            with torch.no_grad():
+                m = _binary_metrics_from_logits(logits, y)
+                train_acc += m["acc"]
+                train_prec += m["precision"]
+                train_rec += m["recall"]
+                train_f1 += m["f1"]
+
             train_loss += loss.item()
             n += 1
 
         train_loss /= max(n, 1)
+        train_acc /= max(n, 1)
+        train_prec /= max(n, 1)
+        train_rec /= max(n, 1)
+        train_f1 /= max(n, 1)
 
         model.eval()
         val_loss = 0.0
+        val_acc = val_prec = val_rec = val_f1 = 0.0
         n = 0
 
         with torch.no_grad():
@@ -341,16 +371,45 @@ def train_scratch_classifier(
                 y = (masks > 0).any(dim=(1, 2)).float()
                 logits = model(images)
                 loss = criterion(logits, y)
+                m = _binary_metrics_from_logits(logits, y)
+                val_acc += m["acc"]
+                val_prec += m["precision"]
+                val_rec += m["recall"]
+                val_f1 += m["f1"]
 
                 val_loss += loss.item()
                 n += 1
 
         val_loss /= max(n, 1)
+        val_acc /= max(n, 1)
+        val_prec /= max(n, 1)
+        val_rec /= max(n, 1)
+        val_f1 /= max(n, 1)
 
         if report_to_tune:
             tune.report(val_loss=val_loss, train_loss=train_loss, epoch=epoch)
 
-        print(f"\nScratch Epoch {epoch}: train_loss={train_loss:.4f}  val_loss={val_loss:.4f}")
+        print(
+            f"\nScratch Epoch {epoch}: "
+            f"train_loss={train_loss:.4f} val_loss={val_loss:.4f} | "
+            f"val_acc={val_acc:.4f} val_f1={val_f1:.4f} val_prec={val_prec:.4f} val_rec={val_rec:.4f}"
+)
+        if wandb:
+            wandb.log({
+                "epoch": epoch,
+
+                "train/loss": train_loss,
+                "train/acc": train_acc,
+                "train/precision": train_prec,
+                "train/recall": train_rec,
+                "train/f1": train_f1,
+
+                "val/loss": val_loss,
+                "val/acc": val_acc,
+                "val/precision": val_prec,
+                "val/recall": val_rec,
+                "val/f1": val_f1,
+            })
 
         # Save best checkpoint (lowest val loss)
         if val_loss < best_val_loss:
@@ -372,7 +431,8 @@ def train_scratch_classifier(
                 },
             )
             print(f"  ✓ Saved best scratch model (val_loss={best_val_loss:.4f})")
-
+    if wandb:
+        wandb.finish()
     return best_val_loss
 
 
@@ -1398,6 +1458,7 @@ def main():
         print("\n" + "#" * 80)
         print("TRAINING SCRATCH MODEL (BINARY CLASSIFIER)")
         print("#" * 80 + "\n")
+        run_name = args.run_name or f"scratch-classifier-lr-{args.lr}-wd-{args.weight_decay}-e-{args.epochs}"
 
         best_val_loss = train_scratch_classifier(
             patches_dir=args.patches_dir,
@@ -1408,6 +1469,8 @@ def main():
             weight_decay=args.weight_decay,
             num_workers=args.num_workers,
             device=args.device,
+            wandb_project=wandb_project,
+            wandb_run_name=run_name
         )
         print(f"Scratch best val loss: {best_val_loss:.4f}")
 
