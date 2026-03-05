@@ -130,8 +130,10 @@ class Sen2FireDataset(Dataset):
 
     def _filter_cloudy(self) -> None:
         """Exclude patches with cloud score above threshold. Uses s2cloudless when available (default), else rule-based."""
+        from tqdm import tqdm
         kept: list[Path] = []
-        for npz in self.samples:
+        method = "s2cloudless" if self.use_s2cloudless else "rule-based"
+        for npz in tqdm(self.samples, desc=f"Cloud filter ({method})", unit="patch"):
             data = np.load(npz)
             img_12 = data["image"]  # (12, 512, 512)
             img_hwc = np.transpose(img_12.astype(np.float32) / self.reflectance_scale, (1, 2, 0))

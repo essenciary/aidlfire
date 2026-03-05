@@ -39,34 +39,7 @@ from dataset import (
 from model import FireSegmentationModel, FireDualHeadModel, CombinedLoss
 from metrics import CombinedMetrics
 from constants import get_device, get_device_name, get_class_names
-
-
-def setup_wandb(config: dict, project: str, run_name: str | None = None, wandb_dir: Path | None = None):
-    """Initialize Weights & Biases logging."""
-    try:
-        import os
-        import sys
-
-        # Avoid local ./wandb run cache shadowing the wandb package: ensure
-        # site-packages is searched before cwd when importing wandb
-        if wandb_dir is not None:
-            os.environ.setdefault("WANDB_DIR", str(wandb_dir))
-        site_packages = [p for p in sys.path if "site-packages" in p]
-        if site_packages:
-            sys.path.insert(0, site_packages[0])
-        import wandb
-        if site_packages:
-            sys.path.pop(0)
-
-        wandb.init(
-            project=project,
-            name=run_name,
-            config=config,
-        )
-        return wandb
-    except ImportError:
-        print("Warning: wandb not installed. Install with: pip install wandb")
-        return None
+from wandb_utils import setup_wandb
 
 
 def save_checkpoint(
@@ -242,8 +215,11 @@ def train(
     num_workers: int = 4,
     device: str = "auto",
     resume: Path | None = None,
-    wandb_project: str | None = None,
+    use_wandb: bool = True,
     wandb_run_name: str | None = None,
+    wandb_api_key: str | None = None,
+    wandb_offline: bool = False,
+    wandb_project: str = "fire-detection",
     early_stopping_patience: int = 10,
     save_every: int = 5,
     overwrite_output_dir: bool = False,
@@ -271,8 +247,9 @@ def train(
         num_workers: DataLoader workers
         device: Device (auto, cuda, mps, cpu)
         resume: Path to checkpoint to resume from
-        wandb_project: W&B project name for logging
+        use_wandb: Enable W&B logging (default True)
         wandb_run_name: W&B run name
+        wandb_project: W&B project name
         early_stopping_patience: Epochs without improvement before stopping
         save_every: Save checkpoint every N epochs
         use_dual_head: If True, use FireDualHeadModel (binary + severity); requires num_classes=5 (GRA)
@@ -342,8 +319,15 @@ def train(
 
     # Setup W&B (use output_dir for wandb cache to avoid ./wandb shadowing the package)
     wandb = None
-    if wandb_project:
-        wandb = setup_wandb(config, wandb_project, wandb_run_name, wandb_dir=output_dir / "wandb")
+    if use_wandb:
+        wandb = setup_wandb(
+            config,
+            wandb_project,
+            wandb_run_name,
+            wandb_dir=output_dir / "wandb",
+            api_key=wandb_api_key,
+            offline=wandb_offline,
+        )
 
     # Compute class weights
     class_weights = None
@@ -620,7 +604,9 @@ def main():
     parser.add_argument("--patience", type=int, default=10, help="Early stopping patience")
 
     # Logging arguments
-    parser.add_argument("--wandb", action="store_true", help="Enable W&B logging")
+    parser.add_argument("--skip-wandb", action="store_true", help="Disable W&B logging (enabled by default)")
+    parser.add_argument("--wandb-offline", action="store_true", help="W&B offline mode (no login, sync later with 'wandb sync')")
+    parser.add_argument("--wandb-api-key", type=str, default=None, metavar="KEY", help="W&B API key (or set WANDB_API_KEY env var)")
     parser.add_argument("--project", type=str, default="fire-detection", help="W&B project name")
     parser.add_argument("--run-name", type=str, default=None, help="W&B run name")
 
@@ -646,8 +632,11 @@ def main():
         num_workers=args.num_workers,
         device=args.device,
         resume=args.resume,
-        wandb_project=args.project if args.wandb else None,
+        use_wandb=not args.skip_wandb,
         wandb_run_name=args.run_name,
+        wandb_api_key=args.wandb_api_key,
+        wandb_offline=args.wandb_offline,
+        wandb_project=args.project,
         early_stopping_patience=args.patience,
         save_every=args.save_every,
         overwrite_output_dir=args.overwrite_output_dir,
