@@ -149,6 +149,8 @@ Input (8 ch) → Encoder → Decoder → Heads (binary 2-class, severity 5-class
 
 **Prerequisites:** CEMS DEL patches in `../patches`, CEMS GRA patches in `../patches_gra`, Sen2Fire in `../data-sen2fire`. See [Patch Generation](#patch-generation).
 
+Add `--wandb` to log training metrics to Weights & Biases (optional).
+
 ```bash
 cd fire-pipeline
 uv sync --extra train
@@ -166,7 +168,8 @@ uv run python train_combined_binary.py \
     --output-dir ./output/v3_combined_binary_resnet34_unet \
     --encoder resnet34 \
     --architecture unet \
-    --epochs 50
+    --epochs 50 \
+    --wandb
 
 # Phase 2
 uv run python train_severity_finetune.py \

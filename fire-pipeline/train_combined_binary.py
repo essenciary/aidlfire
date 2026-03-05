@@ -14,6 +14,8 @@ Usage:
 
 import argparse
 import json
+import os
+import sys
 from pathlib import Path
 
 import torch
@@ -32,6 +34,24 @@ from dataset import (
 from model import FireSegmentationModel, CombinedLoss
 from metrics import CombinedMetrics
 from sen2fire_dataset import Sen2FireDataset
+
+
+def setup_wandb(config: dict, project: str, run_name: str | None = None, wandb_dir: Path | None = None):
+    """Initialize Weights & Biases logging."""
+    try:
+        if wandb_dir is not None:
+            os.environ.setdefault("WANDB_DIR", str(wandb_dir))
+        site_packages = [p for p in sys.path if "site-packages" in p]
+        if site_packages:
+            sys.path.insert(0, site_packages[0])
+        import wandb
+        if site_packages:
+            sys.path.pop(0)
+        wandb.init(project=project, name=run_name, config=config)
+        return wandb
+    except ImportError:
+        print("Warning: wandb not installed. Install with: pip install wandb")
+        return None
 
 
 def save_checkpoint(
@@ -151,6 +171,9 @@ def main():
     parser.add_argument("--save-every", type=int, default=5)
     parser.add_argument("--patience", type=int, default=10)
     parser.add_argument("--overwrite-output-dir", action="store_true")
+    parser.add_argument("--wandb", action="store_true", help="Enable W&B logging")
+    parser.add_argument("--project", type=str, default="fire-detection", help="W&B project name")
+    parser.add_argument("--run-name", type=str, default=None, help="W&B run name")
 
     args = parser.parse_args()
 
@@ -266,9 +289,16 @@ def main():
         "encoder_name": args.encoder,
         "architecture": args.architecture,
         "combined_binary": True,
+        "batch_size": args.batch_size,
+        "epochs": args.epochs,
+        "lr": args.lr,
     }
     with open(args.output_dir / "config.json", "w") as f:
         json.dump(config, f, indent=2)
+
+    wandb_run = None
+    if args.wandb:
+        wandb_run = setup_wandb(config, args.project, args.run_name, wandb_dir=args.output_dir / "wandb")
 
     class_names = list(get_class_names(2))
     train_metrics = CombinedMetrics(num_classes=2, class_names=class_names)
@@ -284,6 +314,19 @@ def main():
         scheduler.step(val_results["fire_iou"])
 
         print(f"\nEpoch {epoch} | Train loss: {train_results['loss']:.4f} | Val loss: {val_results['loss']:.4f} | Val Fire IoU: {val_results['fire_iou']:.4f} | Val F1: {val_results['detection_f1']:.4f}")
+
+        if wandb_run:
+            wandb_run.log({
+                "epoch": epoch,
+                "train/loss": train_results["loss"],
+                "train/fire_iou": train_results["fire_iou"],
+                "train/detection_f1": train_results["detection_f1"],
+                "val/loss": val_results["loss"],
+                "val/fire_iou": val_results["fire_iou"],
+                "val/fire_recall": val_results["fire_recall"],
+                "val/detection_f1": val_results["detection_f1"],
+                "lr": optimizer.param_groups[0]["lr"],
+            })
 
         if val_results["fire_iou"] > best_metric:
             best_metric = val_results["fire_iou"]
@@ -301,10 +344,18 @@ def main():
             break
 
     save_checkpoint(model, optimizer, epoch, val_results, checkpoints_dir / "final_model.pt", config)
+    if wandb_run:
+        wandb_run.finish()
     print(f"\nDone. Best Val Fire IoU: {best_metric:.4f}")
     print(f"Checkpoints: {checkpoints_dir}")
+    # Dynamic Phase 2 suggestion from script inputs
+    ckpt_path = checkpoints_dir / "best_model.pt"
+    patches_gra = args.patches_dir.parent / "patches_gra"
+    out_name = args.output_dir.name
+    phase2_name = out_name.replace("combined_binary", "finetune_severity") if "combined_binary" in out_name else f"{out_name}_severity"
+    phase2_output = args.output_dir.parent / phase2_name
     print("\nNext step: Phase 2 - Fine-tune severity head on CEMS GRA:")
-    print(f"  uv run python train_severity_finetune.py --checkpoint {checkpoints_dir / 'best_model.pt'} --patches-dir ./patches_gra --output-dir ./output/severity_finetune")
+    print(f"  uv run python train_severity_finetune.py --checkpoint {ckpt_path} --patches-dir {patches_gra} --output-dir {phase2_output}")
 
 
 if __name__ == "__main__":
