@@ -1329,7 +1329,7 @@ def tune_yolo_trainable(config, fixed):
         batch=config.get("batch", fixed["batch_size"]),
         epochs=fixed["num_epochs"],
         device=fixed["device"],
-        model_weights=config.get("model_weights", fixed["model_weights"]),
+        model_weights=fixed["model_weights"],
         lr0=config.get("lr0", fixed["lr0"]),
         weight_decay=config.get("weight_decay", fixed["weight_decay"]),
     )
@@ -1552,9 +1552,6 @@ def main():
                 "weight_decay": tune.loguniform(1e-6, 1e-3),
                 "batch_size": tune.choice([8, 16, 32]),
             }
-            if args.focal_loss:
-                search_space["focal_gamma"] = tune.choice([1.5, 2.0, 2.5])
-
             fixed = {
                 "patches_dir": args.patches_dir,
                 "output_dir": (args.output_dir / "unet_scratch" / "tune"),
@@ -1627,7 +1624,6 @@ def main():
                 "lr0": tune.loguniform(5e-4, 1e-2),
                 "weight_decay": tune.loguniform(1e-4, 1e-2),
                 "batch": tune.choice([8, 16, 32]),
-                "model_weights": tune.choice(["yolov8n.pt", "yolov8s.pt"]),
             }
 
             fixed = {
