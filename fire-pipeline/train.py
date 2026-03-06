@@ -60,15 +60,18 @@ from constants import get_device, get_device_name, get_class_names
 try:
     from ray import tune
     try:
-        from ray.train import RunConfig
+        from ray.train import RunConfig, report as ray_report
     except ImportError:
         try:
-            from ray.air import RunConfig
+            from ray.air import RunConfig, session
+            ray_report = session.report
         except ImportError:
             RunConfig = tune.RunConfig
+            ray_report = tune.report
 except ImportError:
     tune = None
     RunConfig = None
+    ray_report = None
 
 
 def setup_wandb(config: dict, project: str, run_name: str | None = None, wandb_dir: Path | None = None):
@@ -464,7 +467,7 @@ def train_scratch_classifier(
             val_auc = 0.0
 
         if report_to_tune:
-            tune.report(val_loss=val_loss, train_loss=train_loss, epoch=epoch)
+            ray_report(val_loss=val_loss, train_loss=train_loss, epoch=epoch)
 
         print(
             f"\nScratch Epoch {epoch}: "
@@ -1268,7 +1271,7 @@ def tune_trainable(config, fixed):
         save_every=fixed["save_every"],
     )
 
-    tune.report(fire_iou=best_metric)
+    ray_report(fire_iou=best_metric)
 
 
 def tune_scratch_trainable(config, fixed):
@@ -1293,7 +1296,7 @@ def tune_scratch_trainable(config, fixed):
         report_to_tune=True,
     )
 
-    tune.report(val_loss=best_val_loss)
+    ray_report(val_loss=best_val_loss)
 
 
 def tune_unet_scratch_trainable(config, fixed):
@@ -1320,7 +1323,7 @@ def tune_unet_scratch_trainable(config, fixed):
         overwrite_output_dir=True,
     )
 
-    tune.report(fire_iou=best_fire_iou)
+    ray_report(fire_iou=best_fire_iou)
 
 
 def tune_yolo_trainable(config, fixed):
@@ -1351,7 +1354,7 @@ def tune_yolo_trainable(config, fixed):
     )
 
     map50 = metrics["best_metrics"].get("metrics/mAP50(B)", 0.0)
-    tune.report(map50=map50)
+    ray_report(map50=map50)
 
 
 def main():
