@@ -467,7 +467,7 @@ def train_scratch_classifier(
             val_auc = 0.0
 
         if report_to_tune:
-            ray_report(val_loss=val_loss, train_loss=train_loss, epoch=epoch)
+            ray_report({"val_loss": val_loss, "train_loss": train_loss, "epoch": epoch})
 
         print(
             f"\nScratch Epoch {epoch}: "
@@ -1271,7 +1271,7 @@ def tune_trainable(config, fixed):
         save_every=fixed["save_every"],
     )
 
-    ray_report(fire_iou=best_metric)
+    ray_report({"fire_iou": best_metric})
 
 
 def tune_scratch_trainable(config, fixed):
@@ -1296,7 +1296,7 @@ def tune_scratch_trainable(config, fixed):
         report_to_tune=True,
     )
 
-    ray_report(val_loss=best_val_loss)
+    ray_report({"val_loss": best_val_loss})
 
 
 def tune_unet_scratch_trainable(config, fixed):
@@ -1323,7 +1323,7 @@ def tune_unet_scratch_trainable(config, fixed):
         overwrite_output_dir=True,
     )
 
-    ray_report(fire_iou=best_fire_iou)
+    ray_report({"fire_iou": best_fire_iou})
 
 
 def tune_yolo_trainable(config, fixed):
@@ -1354,7 +1354,7 @@ def tune_yolo_trainable(config, fixed):
     )
 
     map50 = metrics["best_metrics"].get("metrics/mAP50(B)", 0.0)
-    ray_report(map50=map50)
+    ray_report({"map50": map50})
 
 
 def main():
