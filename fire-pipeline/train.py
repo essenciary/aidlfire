@@ -30,6 +30,7 @@ Outputs:
 import argparse
 import json
 import sys
+import uuid
 from pathlib import Path
 
 import torch
@@ -1244,7 +1245,7 @@ def tune_trainable(config, fixed):
     """
     best_metric = train(
         patches_dir=fixed["patches_dir"],
-        output_dir=fixed["output_dir"] / f"trial_{tune.get_trial_id()}",
+        output_dir=fixed["output_dir"] / f"trial_{uuid.uuid4().hex[:8]}",
         num_classes=fixed["num_classes"],
         encoder_name=fixed["encoder_name"],
         architecture=fixed["architecture"],
@@ -1275,7 +1276,7 @@ def tune_scratch_trainable(config, fixed):
     Ray Tune trainable for ScratchFireModel.
     Reports val_loss (lower is better).
     """
-    trial_dir = fixed["output_dir"] / f"trial_{tune.get_trial_id()}"
+    trial_dir = fixed["output_dir"] / f"trial_{uuid.uuid4().hex[:8]}"
     trial_dir.mkdir(parents=True, exist_ok=True)
 
     best_val_loss = train_scratch_classifier(
@@ -1300,7 +1301,7 @@ def tune_unet_scratch_trainable(config, fixed):
     Ray Tune trainable for UNet from scratch (segmentation).
     Reports best fire_iou (higher is better).
     """
-    trial_dir = fixed["output_dir"] / f"trial_{tune.get_trial_id()}"
+    trial_dir = fixed["output_dir"] / f"trial_{uuid.uuid4().hex[:8]}"
     trial_dir.mkdir(parents=True, exist_ok=True)
 
     best_fire_iou = train_unet_scratch_segmentation(
@@ -1330,7 +1331,7 @@ def tune_yolo_trainable(config, fixed):
     """
     from yolo_runner import train_and_validate_yolo_det7, YoloDetTrainCfg
 
-    trial_dir = fixed["output_dir"] / f"trial_{tune.get_trial_id()}"
+    trial_dir = fixed["output_dir"] / f"trial_{uuid.uuid4().hex[:8]}"
     trial_dir.mkdir(parents=True, exist_ok=True)
 
     cfg = YoloDetTrainCfg(
