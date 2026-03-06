@@ -1550,7 +1550,7 @@ def main():
                 ),
                 run_config=RunConfig(
                     name="tune_scratch",
-                    storage_path=str(fixed["output_dir"]),
+                    storage_path=str(Path(fixed["output_dir"]).resolve()),
                 ),
             )
 
@@ -1614,7 +1614,7 @@ def main():
                 ),
                 run_config=RunConfig(
                     name="tune_unet_scratch",
-                    storage_path=str(fixed["output_dir"]),
+                    storage_path=str(Path(fixed["output_dir"]).resolve()),
                 ),
             )
 
@@ -1707,7 +1707,7 @@ def main():
                 ),
                 run_config=RunConfig(
                     name="tune_yolo",
-                    storage_path=str(yolo_export_dir),
+                    storage_path=str(Path(yolo_export_dir).resolve()),
                 ),
             )
 
@@ -1835,7 +1835,7 @@ def main():
                 ),
                 run_config=RunConfig(
                     name=f"tune_{encoder}",
-                    storage_path=str(fixed["output_dir"]),
+                    storage_path=str(Path(fixed["output_dir"]).resolve()),
                 ),
             )
 
