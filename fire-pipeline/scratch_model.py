@@ -1,9 +1,9 @@
 """
 scratch_model.py
 
-A simple "scratch model" for wildfire detection (binary classification) using 7-channel input.
+A simple "scratch model" for wildfire detection (binary classification) using 8-channel input.
 
-- Input:  (B, 7, H, W)
+- Input:  (B, 8, H, W)
 - Output: (B,) logits for BCEWithLogitsLoss
 
 """
@@ -19,12 +19,12 @@ class ScratchFireModel(nn.Module):
     Simple CNN classifier (scratch model) for patch-level fire presence.
 
     Architecture (PyTorch version of your Keras model):
-      - 1x1 conv "spectral re-weighting": 7 -> 16
+      - 1x1 conv "spectral re-weighting": 8 -> 16
       - Conv blocks: 16->32->64->128 with BN + ReLU + MaxPool
       - Global pooling (adaptive) -> Dropout -> Linear(128->1)
     """
 
-    def __init__(self, in_channels: int = 7, dropout: float = 0.3):
+    def __init__(self, in_channels: int = 8, dropout: float = 0.3):
         super().__init__()
 
         self.spectral = nn.Sequential(
@@ -62,7 +62,7 @@ class ScratchFireModel(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: (B,7,H,W)
+        # x: (B,8,H,W)
         x = self.spectral(x)
         x = self.block1(x)
         x = self.block2(x)

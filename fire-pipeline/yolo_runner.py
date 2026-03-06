@@ -13,7 +13,7 @@ It expects a standard Ultralytics dataset layout like:
     data.yaml
 
 Where:
-  - Each image is a 7-channel multi-band TIFF (CHW: 7,H,W)
+  - Each image is an 8-channel multi-band TIFF (CHW: 8,H,W)
   - Each label is YOLO-detection format:
       <class> <x_center> <y_center> <width> <height>
     with all coordinates normalized to [0..1].
@@ -55,7 +55,7 @@ def train_and_validate_yolo_det7(
     Train + validate YOLOv8 detection using Ultralytics.
 
     Args:
-        data_yaml: Path to the exported dataset YAML (contains channels: 7).
+        data_yaml: Path to the exported dataset YAML (contains channels: 8).
         output_dir: Directory where Ultralytics will write runs/ artifacts.
         cfg: training configuration.
 

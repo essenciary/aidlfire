@@ -25,7 +25,7 @@ class Block(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, channels=(7, 16, 32, 64)):
+    def __init__(self, channels=(8, 16, 32, 64)):
         super().__init__()
         # Encoder blocks + maxpool
         self.encBlocks = nn.ModuleList(
@@ -96,7 +96,7 @@ class Decoder(nn.Module):
 class UNet(nn.Module):
     def __init__(
         self,
-        in_channels: int = 7,
+        in_channels: int = 8,
         num_classes: int = 2,
         features=(16, 32, 64),
         retainDim: bool = True,
