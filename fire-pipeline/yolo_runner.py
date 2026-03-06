@@ -33,17 +33,21 @@ class YoloDetTrainCfg:
     """
     Training configuration.
 
-    imgsz:  Ultralytics training resolution (square)
-    batch:  Ultralytics batch size
-    epochs: Training epochs
-    device: Ultralytics device string ("0", "cpu", "mps", etc.)
+    imgsz:        Ultralytics training resolution (square)
+    batch:        Ultralytics batch size
+    epochs:       Training epochs
+    device:       Ultralytics device string ("0", "cpu", "mps", etc.)
     model_weights: which YOLO weights to start from (detection weights)
+    lr0:          Initial learning rate
+    weight_decay: Optimizer weight decay
     """
     imgsz: int = 512
     batch: int = 16
     epochs: int = 50
     device: str = "0"
     model_weights: str = "yolov8n.pt"
+    lr0: float = 1e-2
+    weight_decay: float = 5e-4
 
 
 def train_and_validate_yolo_det7(
@@ -92,6 +96,8 @@ def train_and_validate_yolo_det7(
         epochs=cfg.epochs,
         batch=cfg.batch,
         device=cfg.device,
+        lr0=cfg.lr0,
+        weight_decay=cfg.weight_decay,
         exist_ok=True,
     )
 

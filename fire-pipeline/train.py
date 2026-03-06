@@ -1286,6 +1286,64 @@ def tune_scratch_trainable(config, fixed):
     tune.report(val_loss=best_val_loss)
 
 
+def tune_unet_scratch_trainable(config, fixed):
+    """
+    Ray Tune trainable for UNet from scratch (segmentation).
+    Reports best fire_iou (higher is better).
+    """
+    trial_dir = fixed["output_dir"] / f"trial_{tune.get_trial_id()}"
+    trial_dir.mkdir(parents=True, exist_ok=True)
+
+    best_fire_iou = train_unet_scratch_segmentation(
+        patches_dir=fixed["patches_dir"],
+        output_dir=trial_dir,
+        num_classes=fixed["num_classes"],
+        batch_size=config.get("batch_size", fixed["batch_size"]),
+        num_epochs=fixed["num_epochs"],
+        learning_rate=config.get("learning_rate", fixed["learning_rate"]),
+        weight_decay=config.get("weight_decay", fixed["weight_decay"]),
+        use_class_weights=fixed["use_class_weights"],
+        use_focal_loss=fixed["use_focal_loss"],
+        focal_gamma=config.get("focal_gamma", fixed["focal_gamma"]),
+        num_workers=fixed["num_workers"],
+        device=fixed["device"],
+        overwrite_output_dir=True,
+    )
+
+    tune.report(fire_iou=best_fire_iou)
+
+
+def tune_yolo_trainable(config, fixed):
+    """
+    Ray Tune trainable for YOLOv8 detection.
+    Reports val mAP@0.5 (higher is better).
+    Dataset export is done once before tuning starts; each trial only runs training.
+    """
+    from yolo_runner import train_and_validate_yolo_det7, YoloDetTrainCfg
+
+    trial_dir = fixed["output_dir"] / f"trial_{tune.get_trial_id()}"
+    trial_dir.mkdir(parents=True, exist_ok=True)
+
+    cfg = YoloDetTrainCfg(
+        imgsz=fixed["imgsz"],
+        batch=config.get("batch", fixed["batch_size"]),
+        epochs=fixed["num_epochs"],
+        device=fixed["device"],
+        model_weights=config.get("model_weights", fixed["model_weights"]),
+        lr0=config.get("lr0", fixed["lr0"]),
+        weight_decay=config.get("weight_decay", fixed["weight_decay"]),
+    )
+
+    metrics = train_and_validate_yolo_det7(
+        data_yaml=fixed["data_yaml"],
+        output_dir=trial_dir,
+        cfg=cfg,
+    )
+
+    map50 = metrics["best_metrics"].get("metrics/mAP50(B)", 0.0)
+    tune.report(map50=map50)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Train fire detection/segmentation model",
@@ -1427,8 +1485,8 @@ def main():
         "--tune-target",
         type=str,
         default="seg",
-        choices=["seg", "scratch"],
-        help="What to tune: segmentation models (seg) or scratch model (scratch)",
+        choices=["seg", "scratch", "unet_scratch", "yolo"],
+        help="What to tune: segmentation models (seg), CNN scratch (scratch), UNet scratch (unet_scratch), or YOLO (yolo)",
     )
 
     args = parser.parse_args()
@@ -1487,7 +1545,125 @@ def main():
             print("\nBest scratch hyperparameters:", best.config)
             print("Best scratch val_loss:", best.metrics["val_loss"])
             return
-        
+
+        if args.tune_target == "unet_scratch":
+            search_space = {
+                "learning_rate": tune.loguniform(5e-5, 5e-4),
+                "weight_decay": tune.loguniform(1e-6, 1e-3),
+                "batch_size": tune.choice([8, 16, 32]),
+            }
+            if args.focal_loss:
+                search_space["focal_gamma"] = tune.choice([1.5, 2.0, 2.5])
+
+            fixed = {
+                "patches_dir": args.patches_dir,
+                "output_dir": (args.output_dir / "unet_scratch" / "tune"),
+                "num_classes": args.num_classes,
+                "batch_size": args.batch_size,
+                "num_epochs": args.epochs,
+                "learning_rate": args.lr,
+                "weight_decay": args.weight_decay,
+                "use_class_weights": not args.no_class_weights,
+                "use_focal_loss": args.focal_loss,
+                "focal_gamma": args.focal_gamma,
+                "num_workers": args.num_workers,
+                "device": args.device,
+            }
+
+            fixed["output_dir"].mkdir(parents=True, exist_ok=True)
+
+            tuner = tune.Tuner(
+                tune.with_parameters(tune_unet_scratch_trainable, fixed=fixed),
+                param_space=search_space,
+                tune_config=tune.TuneConfig(
+                    metric="fire_iou",
+                    mode="max",
+                    num_samples=args.tune_samples if args.tune_mode == "random" else 1,
+                ),
+                run_config=tune.RunConfig(
+                    name="tune_unet_scratch",
+                    local_dir=str(fixed["output_dir"]),
+                ),
+            )
+
+            results = tuner.fit()
+            best = results.get_best_result(metric="fire_iou", mode="max")
+
+            print("\nBest UNet scratch hyperparameters:", best.config)
+            print("Best UNet scratch fire_iou:", best.metrics["fire_iou"])
+            return
+
+        if args.tune_target == "yolo":
+            from yolo_dataset_exporter import export_yolo_det7_dataset, ExportDet7Cfg
+            from yolo_runner import YoloDetTrainCfg
+
+            # Export dataset once; all trials reuse it
+            yolo_channels = get_patch_num_channels(args.patches_dir)
+            yolo_export_dir = args.output_dir / "yolo" / "tune"
+            yolo_export_dir.mkdir(parents=True, exist_ok=True)
+            data_yaml = yolo_export_dir / "yolo_det_7ch_dataset" / "data.yaml"
+
+            if not data_yaml.exists():
+                print("Exporting YOLO dataset (done once for all trials)...")
+                export_yolo_det7_dataset(
+                    patches_dir=args.patches_dir,
+                    export_root=yolo_export_dir,
+                    num_classes=args.num_classes,
+                    export_cfg=ExportDet7Cfg(
+                        channels=yolo_channels,
+                        mask_to_boxes_mode="components",
+                        min_box_area_px=10,
+                    ),
+                    train_cfg=YoloDetTrainCfg(
+                        imgsz=512,
+                        batch=args.batch_size,
+                        epochs=1,  # dummy run just to trigger export
+                        device=args.device,
+                    ),
+                    num_workers=args.num_workers,
+                )
+
+            search_space = {
+                "lr0": tune.loguniform(5e-4, 1e-2),
+                "weight_decay": tune.loguniform(1e-4, 1e-2),
+                "batch": tune.choice([8, 16, 32]),
+                "model_weights": tune.choice(["yolov8n.pt", "yolov8s.pt"]),
+            }
+
+            fixed = {
+                "patches_dir": args.patches_dir,
+                "output_dir": yolo_export_dir,
+                "data_yaml": data_yaml,
+                "num_epochs": args.epochs,
+                "batch_size": args.batch_size,
+                "imgsz": 512,
+                "device": args.device,
+                "model_weights": "yolov8n.pt",
+                "lr0": 1e-2,
+                "weight_decay": 5e-4,
+            }
+
+            tuner = tune.Tuner(
+                tune.with_parameters(tune_yolo_trainable, fixed=fixed),
+                param_space=search_space,
+                tune_config=tune.TuneConfig(
+                    metric="map50",
+                    mode="max",
+                    num_samples=args.tune_samples if args.tune_mode == "random" else 1,
+                ),
+                run_config=tune.RunConfig(
+                    name="tune_yolo",
+                    local_dir=str(yolo_export_dir),
+                ),
+            )
+
+            results = tuner.fit()
+            best = results.get_best_result(metric="map50", mode="max")
+
+            print("\nBest YOLO hyperparameters:", best.config)
+            print("Best YOLO mAP@0.5:", best.metrics["map50"])
+            return
+
         # Segmentation tuning
         if args.tune_mode == "grid":
             search_space = {
