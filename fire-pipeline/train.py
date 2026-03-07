@@ -60,17 +60,19 @@ from constants import get_device, get_device_name, get_class_names
 try:
     from ray import tune
     try:
-        from ray.train import RunConfig, report as ray_report
+        from ray.train import RunConfig, CheckpointConfig, report as ray_report
     except ImportError:
         try:
-            from ray.air import RunConfig, session
+            from ray.air import RunConfig, CheckpointConfig, session
             ray_report = session.report
         except ImportError:
             RunConfig = tune.RunConfig
+            CheckpointConfig = None
             ray_report = tune.report
 except ImportError:
     tune = None
     RunConfig = None
+    CheckpointConfig = None
     ray_report = None
 
 
@@ -1591,6 +1593,7 @@ def main():
                 run_config=RunConfig(
                     name="tune_scratch",
                     storage_path=str(Path(fixed["output_dir"]).resolve()),
+                    checkpoint_config=CheckpointConfig(checkpoint_at_end=False) if CheckpointConfig else None,
                 ),
             )
 
@@ -1657,6 +1660,7 @@ def main():
                 run_config=RunConfig(
                     name="tune_unet_scratch",
                     storage_path=str(Path(fixed["output_dir"]).resolve()),
+                    checkpoint_config=CheckpointConfig(checkpoint_at_end=False) if CheckpointConfig else None,
                 ),
             )
 
@@ -1751,6 +1755,7 @@ def main():
                 run_config=RunConfig(
                     name="tune_yolo",
                     storage_path=str(Path(yolo_export_dir).resolve()),
+                    checkpoint_config=CheckpointConfig(checkpoint_at_end=False) if CheckpointConfig else None,
                 ),
             )
 
@@ -1880,6 +1885,7 @@ def main():
                 run_config=RunConfig(
                     name=f"tune_{encoder}",
                     storage_path=str(Path(fixed["output_dir"]).resolve()),
+                    checkpoint_config=CheckpointConfig(checkpoint_at_end=False) if CheckpointConfig else None,
                 ),
             )
 
