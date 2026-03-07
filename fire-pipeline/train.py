@@ -578,7 +578,7 @@ def train_scratch_classifier(
 
     if wandb:
         wandb.finish()
-    return best_val_f1
+    return best_val_f1, best_epoch
 
 
 def train_unet_scratch_segmentation(
@@ -905,7 +905,7 @@ def train_unet_scratch_segmentation(
             "best_epoch": best_epoch,
         })
 
-    return best_metric
+    return best_metric, best_epoch
 
 
 def train(
@@ -1310,7 +1310,7 @@ def tune_scratch_trainable(config, fixed):
     trial_dir = fixed["output_dir"] / f"trial_{uuid.uuid4().hex[:8]}"
     trial_dir.mkdir(parents=True, exist_ok=True)
 
-    best_val_loss = train_scratch_classifier(
+    best_val_f1, best_epoch = train_scratch_classifier(
         patches_dir=fixed["patches_dir"],
         output_dir=trial_dir,
         batch_size=config.get("batch_size", fixed["batch_size"]),
@@ -1325,7 +1325,7 @@ def tune_scratch_trainable(config, fixed):
         max_batches=fixed.get("max_batches"),
     )
 
-    ray_report({"val_loss": best_val_loss})
+    ray_report({"val_f1": best_val_f1, "best_epoch": best_epoch})
 
 
 def tune_unet_scratch_trainable(config, fixed):
@@ -1336,7 +1336,7 @@ def tune_unet_scratch_trainable(config, fixed):
     trial_dir = fixed["output_dir"] / f"trial_{uuid.uuid4().hex[:8]}"
     trial_dir.mkdir(parents=True, exist_ok=True)
 
-    best_fire_iou = train_unet_scratch_segmentation(
+    best_fire_iou, best_epoch = train_unet_scratch_segmentation(
         patches_dir=fixed["patches_dir"],
         output_dir=trial_dir,
         num_classes=fixed["num_classes"],
@@ -1353,7 +1353,7 @@ def tune_unet_scratch_trainable(config, fixed):
         max_batches=fixed.get("max_batches"),
     )
 
-    ray_report({"fire_iou": best_fire_iou})
+    ray_report({"fire_iou": best_fire_iou, "best_epoch": best_epoch})
 
 
 def tune_yolo_trainable(config, fixed):
@@ -1590,8 +1590,8 @@ def main():
                 tune.with_parameters(tune_scratch_trainable, fixed=fixed),
                 param_space=search_space,
                 tune_config=tune.TuneConfig(
-                    metric="val_loss",
-                    mode="min",
+                    metric="val_f1",
+                    mode="max",
                     num_samples=args.tune_samples if args.tune_mode == "random" else 1,
                 ),
                 run_config=RunConfig(
@@ -1604,18 +1604,20 @@ def main():
             results = tuner.fit()
 
             # Re-run top-K best configs with W&B and CSV logging
-            top_k = sorted(results, key=lambda r: r.metrics.get("val_loss", float("inf")))[:args.tune_top_k]
+            top_k = sorted(results, key=lambda r: -r.metrics.get("val_f1", 0.0))[:args.tune_top_k]
             wandb_project = args.project if args.wandb else None
 
             for rank, result in enumerate(top_k, start=1):
                 cfg = result.config
+                best_epoch = int(result.metrics.get("best_epoch", args.epochs - 1))
+                rerun_epochs = best_epoch + 1  # epochs are 0-indexed
                 run_name = f"scratch-tune-top{rank}-lr{cfg['learning_rate']:.1e}-wd{cfg['weight_decay']:.1e}-do{cfg.get('dropout', 0.3):.2f}"
-                print(f"\n[Re-run {rank}/{args.tune_top_k}] scratch best config: {cfg}")
+                print(f"\n[Re-run {rank}/{args.tune_top_k}] scratch best config: {cfg} (epochs={rerun_epochs})")
                 train_scratch_classifier(
                     patches_dir=args.patches_dir,
                     output_dir=args.output_dir / "scratch_model" / f"best_{rank}",
                     batch_size=cfg.get("batch_size", args.batch_size),
-                    num_epochs=args.epochs,
+                    num_epochs=rerun_epochs,
                     learning_rate=cfg["learning_rate"],
                     weight_decay=cfg["weight_decay"],
                     num_workers=args.num_workers,
@@ -1676,14 +1678,16 @@ def main():
 
             for rank, result in enumerate(top_k, start=1):
                 cfg = result.config
+                best_epoch = int(result.metrics.get("best_epoch", args.epochs - 1))
+                rerun_epochs = best_epoch + 1
                 run_name = f"unet-scratch-tune-top{rank}-lr{cfg['learning_rate']:.1e}-wd{cfg['weight_decay']:.1e}-bs{cfg.get('batch_size', args.batch_size)}"
-                print(f"\n[Re-run {rank}/{args.tune_top_k}] unet_scratch best config: {cfg}")
+                print(f"\n[Re-run {rank}/{args.tune_top_k}] unet_scratch best config: {cfg} (epochs={rerun_epochs})")
                 train_unet_scratch_segmentation(
                     patches_dir=args.patches_dir,
                     output_dir=args.output_dir / "unet_scratch" / f"best_{rank}",
                     num_classes=args.num_classes,
                     batch_size=cfg.get("batch_size", args.batch_size),
-                    num_epochs=args.epochs,
+                    num_epochs=rerun_epochs,
                     learning_rate=cfg["learning_rate"],
                     weight_decay=cfg["weight_decay"],
                     use_class_weights=not args.no_class_weights,
