@@ -327,7 +327,7 @@ def export_yolo_det7_dataset(
     names = [f"class_{i}" for i in range(num_classes)]
     data_yaml = ds_dir / "data.yaml"
     data_yaml.write_text(
-        f"path: {ds_dir.as_posix()}\n"
+        f"path: {ds_dir.resolve().as_posix()}\n"
         f"train: images/train\n"
         f"val: images/val\n"
         f"channels: {export_cfg.channels}\n"
