@@ -1633,7 +1633,11 @@ def main():
             results = tuner.fit()
 
             # Re-run top-K best configs with W&B and CSV logging
-            top_k = sorted(results, key=lambda r: -r.metrics.get("val_f1", 0.0))[:args.tune_top_k]
+            valid_results = [r for r in results if r.config is not None]
+            if not valid_results:
+                print("❌ All tuning trials failed. Check error logs in the output directory.")
+                return
+            top_k = sorted(valid_results, key=lambda r: -r.metrics.get("val_f1", 0.0))[:args.tune_top_k]
             wandb_project = args.project if args.wandb else None
 
             for rank, result in enumerate(top_k, start=1):
@@ -1706,7 +1710,11 @@ def main():
             results = tuner.fit()
 
             # Re-run top-K best configs with W&B and CSV logging
-            top_k = sorted(results, key=lambda r: -r.metrics.get("fire_iou", 0.0))[:args.tune_top_k]
+            valid_results = [r for r in results if r.config is not None]
+            if not valid_results:
+                print("❌ All tuning trials failed. Check error logs in the output directory.")
+                return
+            top_k = sorted(valid_results, key=lambda r: -r.metrics.get("fire_iou", 0.0))[:args.tune_top_k]
             wandb_project = args.project if args.wandb else None
 
             for rank, result in enumerate(top_k, start=1):
@@ -1808,7 +1816,11 @@ def main():
 
             # Re-run top-K best configs with W&B and CSV logging
             from yolo_runner import train_and_validate_yolo_det7, YoloDetTrainCfg
-            top_k = sorted(results, key=lambda r: -r.metrics.get("map50", 0.0))[:args.tune_top_k]
+            valid_results = [r for r in results if r.config is not None]
+            if not valid_results:
+                print("❌ All tuning trials failed. Check error logs in the output directory.")
+                return
+            top_k = sorted(valid_results, key=lambda r: -r.metrics.get("map50", 0.0))[:args.tune_top_k]
             wandb_project = args.project if args.wandb else None
 
             for rank, result in enumerate(top_k, start=1):
