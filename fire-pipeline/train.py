@@ -59,19 +59,12 @@ from constants import get_device, get_device_name, get_class_names
 
 try:
     from ray import tune
+    ray_report = tune.report
     try:
-        from ray.train import report as ray_report
+        from ray.tune import RunConfig
     except ImportError:
         try:
-            from ray.air import session
-            ray_report = session.report
-        except ImportError:
-            ray_report = tune.report
-    try:
-        from ray.air import RunConfig
-    except ImportError:
-        try:
-            from ray.train import RunConfig
+            from ray.air import RunConfig
         except ImportError:
             RunConfig = tune.RunConfig
 except ImportError:
@@ -328,6 +321,7 @@ def _make_run_name(model: str, args) -> str:
 def train_scratch_classifier(
     patches_dir: Path,
     output_dir: Path,
+    sen2fire_dir: Path | None = None,
     batch_size: int = 16,
     num_epochs: int = 20,
     learning_rate: float = 1e-4,
@@ -386,8 +380,19 @@ def train_scratch_classifier(
         use_weighted_sampling=False,
         fire_sample_weight=1.0,
     )
-    train_loader = dm.train_dataloader()
-    val_loader = dm.val_dataloader()
+    if sen2fire_dir is not None:
+        from sen2fire_dataset import Sen2FireDataset
+        from torch.utils.data import ConcatDataset
+        sen2fire_train = Sen2FireDataset(sen2fire_dir, split="train", use_s2cloudless=False)
+        sen2fire_val = Sen2FireDataset(sen2fire_dir, split="val", use_s2cloudless=False)
+        combined_train = ConcatDataset([dm.train_dataset, sen2fire_train])
+        combined_val = ConcatDataset([dm.val_dataset, sen2fire_val])
+        train_loader = DataLoader(combined_train, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        val_loader = DataLoader(combined_val, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+        print(f"Combined dataset: {len(combined_train)} train, {len(combined_val)} val (CEMS + Sen2Fire)")
+    else:
+        train_loader = dm.train_dataloader()
+        val_loader = dm.val_dataloader()
 
     # Model
     model = ScratchFireModel(in_channels=get_patch_num_channels(patches_dir), dropout=dropout).to(device_t)
@@ -584,6 +589,7 @@ def train_scratch_classifier(
 def train_unet_scratch_segmentation(
     patches_dir: Path,
     output_dir: Path,
+    sen2fire_dir: Path | None = None,
     num_classes: int = 2,
     batch_size: int = 16,
     num_epochs: int = 50,
@@ -707,11 +713,21 @@ def train_unet_scratch_segmentation(
         use_weighted_sampling=use_weighted_sampling,
         fire_sample_weight=fire_sample_weight,
     )
-    train_loader = data_module.train_dataloader()
-    val_loader = data_module.val_dataloader()
-
-    print(f"Training samples: {len(data_module.train_dataset)}")
-    print(f"Validation samples: {len(data_module.val_dataset)}")
+    if sen2fire_dir is not None:
+        from sen2fire_dataset import Sen2FireDataset
+        from torch.utils.data import ConcatDataset
+        sen2fire_train = Sen2FireDataset(sen2fire_dir, split="train", use_s2cloudless=False)
+        sen2fire_val = Sen2FireDataset(sen2fire_dir, split="val", use_s2cloudless=False)
+        combined_train = ConcatDataset([data_module.train_dataset, sen2fire_train])
+        combined_val = ConcatDataset([data_module.val_dataset, sen2fire_val])
+        train_loader = DataLoader(combined_train, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        val_loader = DataLoader(combined_val, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+        print(f"Combined dataset: {len(combined_train)} train, {len(combined_val)} val (CEMS + Sen2Fire)")
+    else:
+        train_loader = data_module.train_dataloader()
+        val_loader = data_module.val_dataloader()
+        print(f"Training samples: {len(data_module.train_dataset)}")
+        print(f"Validation samples: {len(data_module.val_dataset)}")
 
     # Model (UNet from scratch)
     print("\nCreating scratch U-Net model...")
@@ -1312,6 +1328,7 @@ def tune_scratch_trainable(config, fixed):
 
     best_val_f1, best_epoch = train_scratch_classifier(
         patches_dir=fixed["patches_dir"],
+        sen2fire_dir=fixed.get("sen2fire_dir"),
         output_dir=trial_dir,
         batch_size=config.get("batch_size", fixed["batch_size"]),
         num_epochs=fixed["num_epochs"],
@@ -1338,6 +1355,7 @@ def tune_unet_scratch_trainable(config, fixed):
 
     best_fire_iou, best_epoch = train_unet_scratch_segmentation(
         patches_dir=fixed["patches_dir"],
+        sen2fire_dir=fixed.get("sen2fire_dir"),
         output_dir=trial_dir,
         num_classes=fixed["num_classes"],
         batch_size=config.get("batch_size", fixed["batch_size"]),
@@ -1399,6 +1417,12 @@ def main():
         type=Path,
         default=Path("./patches"),
         help="Directory containing train/val/test patches",
+    )
+    parser.add_argument(
+        "--sen2fire-dir",
+        type=Path,
+        default=None,
+        help="Optional Sen2Fire dataset root dir. If provided, combined with CEMS patches for scratch and unet_scratch models.",
     )
     parser.add_argument(
         "--output-dir",
@@ -1555,6 +1579,9 @@ def main():
         ENCODER_OPTIONS if train_all_encoders else [args.encoder]
     )
 
+    dataset_label = "1rst + 2nd dataset" if args.sen2fire_dir else "1rst dataset"
+    sen2fire_tag = "+s2f" if args.sen2fire_dir else ""
+
     # Hyperparameter tuning
     if args.tune == "true":
         if tune is None:
@@ -1574,6 +1601,7 @@ def main():
 
             fixed = {
                 "patches_dir": Path(args.patches_dir).resolve(),
+                "sen2fire_dir": Path(args.sen2fire_dir).resolve() if args.sen2fire_dir else None,
                 "output_dir": (args.output_dir / "scratch_model" / "tune"),
                 "batch_size": args.batch_size,
                 "num_epochs": args.epochs,
@@ -1611,11 +1639,12 @@ def main():
             for rank, result in enumerate(top_k, start=1):
                 cfg = result.config
                 best_epoch = int(result.metrics.get("best_epoch", args.epochs - 1))
-                rerun_epochs = best_epoch + 1  # epochs are 0-indexed
-                run_name = f"scratch-tune-top{rank}-lr{cfg['learning_rate']:.1e}-wd{cfg['weight_decay']:.1e}-do{cfg.get('dropout', 0.3):.2f}"
+                rerun_epochs = max(1, best_epoch + 1)  # epochs are 0-indexed
+                run_name = f"scratch{sen2fire_tag}-tune-top{rank}-lr{cfg['learning_rate']:.1e}-wd{cfg['weight_decay']:.1e}-do{cfg.get('dropout', 0.3):.2f}"
                 print(f"\n[Re-run {rank}/{args.tune_top_k}] scratch best config: {cfg} (epochs={rerun_epochs})")
                 train_scratch_classifier(
                     patches_dir=args.patches_dir,
+                    sen2fire_dir=args.sen2fire_dir,
                     output_dir=args.output_dir / "scratch_model" / f"best_{rank}",
                     batch_size=cfg.get("batch_size", args.batch_size),
                     num_epochs=rerun_epochs,
@@ -1628,6 +1657,7 @@ def main():
                     wandb_project=wandb_project,
                     wandb_run_name=run_name,
                     results_csv=args.results_csv,
+                    dataset=dataset_label,
                     max_batches=5 if args.smoke_test else None,
                 )
             return
@@ -1640,6 +1670,7 @@ def main():
             }
             fixed = {
                 "patches_dir": Path(args.patches_dir).resolve(),
+                "sen2fire_dir": Path(args.sen2fire_dir).resolve() if args.sen2fire_dir else None,
                 "output_dir": (args.output_dir / "unet_scratch" / "tune"),
                 "num_classes": args.num_classes,
                 "batch_size": args.batch_size,
@@ -1681,11 +1712,12 @@ def main():
             for rank, result in enumerate(top_k, start=1):
                 cfg = result.config
                 best_epoch = int(result.metrics.get("best_epoch", args.epochs - 1))
-                rerun_epochs = best_epoch + 1
-                run_name = f"unet-scratch-tune-top{rank}-lr{cfg['learning_rate']:.1e}-wd{cfg['weight_decay']:.1e}-bs{cfg.get('batch_size', args.batch_size)}"
+                rerun_epochs = max(1, best_epoch + 1)
+                run_name = f"unet-scratch{sen2fire_tag}-tune-top{rank}-lr{cfg['learning_rate']:.1e}-wd{cfg['weight_decay']:.1e}-bs{cfg.get('batch_size', args.batch_size)}"
                 print(f"\n[Re-run {rank}/{args.tune_top_k}] unet_scratch best config: {cfg} (epochs={rerun_epochs})")
                 train_unet_scratch_segmentation(
                     patches_dir=args.patches_dir,
+                    sen2fire_dir=args.sen2fire_dir,
                     output_dir=args.output_dir / "unet_scratch" / f"best_{rank}",
                     num_classes=args.num_classes,
                     batch_size=cfg.get("batch_size", args.batch_size),
@@ -1700,6 +1732,7 @@ def main():
                     wandb_project=wandb_project,
                     wandb_run_name=run_name,
                     results_csv=args.results_csv,
+                    dataset=dataset_label,
                     overwrite_output_dir=True,
                     max_batches=5 if args.smoke_test else None,
                 )
@@ -1733,12 +1766,13 @@ def main():
                         device=args.device,
                     ),
                     num_workers=args.num_workers,
+                    sen2fire_dir=args.sen2fire_dir,
                 )
 
             search_space = {
                 "lr0": tune.loguniform(5e-4, 1e-2),
                 "weight_decay": tune.loguniform(1e-4, 1e-2),
-                "batch": tune.choice([8, 16, 32]),
+                "batch": tune.choice([8, 16]),
             }
 
             fixed = {
@@ -1779,7 +1813,7 @@ def main():
 
             for rank, result in enumerate(top_k, start=1):
                 cfg = result.config
-                run_name = f"yolo-tune-top{rank}-lr{cfg['lr0']:.1e}-wd{cfg['weight_decay']:.1e}-bs{cfg.get('batch', args.batch_size)}"
+                run_name = f"yolo{sen2fire_tag}-tune-top{rank}-lr{cfg['lr0']:.1e}-wd{cfg['weight_decay']:.1e}-bs{cfg.get('batch', args.batch_size)}"
                 print(f"\n[Re-run {rank}/{args.tune_top_k}] yolo best config: {cfg}")
 
                 yolo_cfg = YoloDetTrainCfg(
@@ -1999,6 +2033,7 @@ def main():
                 model_weights="yolov8n.pt",
             ),
             num_workers=args.num_workers,
+            sen2fire_dir=args.sen2fire_dir,
         )
 
         # Report block
@@ -2014,7 +2049,7 @@ def main():
         if args.results_csv is not None:
             yolo_m = dict(metrics["best_metrics"])
             append_results_csv(args.results_csv, {
-                "dataset": "1rst dataset",
+                "dataset": dataset_label,
                 "model_name": "yolo",
                 "wandb_run_name": yolo_run_name if args.wandb else "-",
                 "MAP_50_95": yolo_m.get("metrics/mAP50-95(B)", ""),

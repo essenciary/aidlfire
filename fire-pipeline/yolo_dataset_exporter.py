@@ -231,6 +231,7 @@ def export_yolo_det7_dataset(
     export_cfg: ExportDet7Cfg,
     train_cfg: YoloDetTrainCfg,
     num_workers: int = 4,
+    sen2fire_dir: Path | None = None,
 ) -> dict:
     """
     Exports YOLO detection dataset AND calls the YOLO runner.
@@ -311,6 +312,16 @@ def export_yolo_det7_dataset(
 
     dump(dm.train_dataloader(), "train")
     dump(dm.val_dataloader(), "val")
+
+    if sen2fire_dir is not None:
+        from sen2fire_dataset import Sen2FireDataset
+        from torch.utils.data import DataLoader
+        print("Exporting Sen2Fire patches into YOLO dataset...")
+        sen2fire_train = Sen2FireDataset(sen2fire_dir, split="train", use_s2cloudless=False)
+        sen2fire_val = Sen2FireDataset(sen2fire_dir, split="val", use_s2cloudless=False)
+        dump(DataLoader(sen2fire_train, batch_size=train_cfg.batch, num_workers=num_workers), "train")
+        dump(DataLoader(sen2fire_val, batch_size=train_cfg.batch, num_workers=num_workers), "val")
+        print(f"Sen2Fire added: {len(sen2fire_train)} train, {len(sen2fire_val)} val")
 
     # data.yaml for Ultralytics
     names = [f"class_{i}" for i in range(num_classes)]
