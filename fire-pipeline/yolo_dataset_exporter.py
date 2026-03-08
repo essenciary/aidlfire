@@ -2,7 +2,7 @@
 yolo_dataset_exporter.py
 
 This file is responsible for:
-  1) Loading your existing patch dataset (7-channel image tensors + pixel masks)
+  1) Loading your existing patch dataset (8-channel image tensors + pixel masks)
      via your WildfireDataModule in dataset.py.
   2) Converting it into a YOLO DETECTION dataset on disk.
   3) Calling the YOLO trainer (yolo_runner.py).
@@ -18,12 +18,12 @@ A) From segmentation masks -> detection labels:
    - detection requires bounding boxes
    - we derive bounding boxes from the segmentation mask
 
-B) From 7-channel tensors -> image files Ultralytics can load:
+B) From 8-channel tensors -> image files Ultralytics can load:
    - PNG/JPG only support 3 channels
-   - so we export multi-band TIFF files with 7 channels
+   - so we export multi-band TIFF files with 8 channels (7 bands + NDVI)
 
-C) Ensure Ultralytics knows there are 7 input channels:
-   - data.yaml must include: channels: 7
+C) Ensure Ultralytics knows there are 8 input channels:
+   - data.yaml must include: channels: 8
 
 Dataset semantics (confirmed from your dataset.py):
 --------------------------------------------------
@@ -67,16 +67,16 @@ from yolo_runner import train_and_validate_yolo_det7, YoloDetTrainCfg
 @dataclass
 class ExportDet7Cfg:
     """
-    Configuration for exporting a YOLO detection dataset (7 channels).
+    Configuration for exporting a YOLO detection dataset (8 channels: 7 bands + NDVI).
 
-    channels: must be 7
+    channels: must be 8
     mask_to_boxes_mode:
       - "single": one box per class per image (fast, simple)
       - "components": one box per connected component per class (more correct when multiple blobs)
         Requires: scipy
     min_box_area_px: filters tiny noise boxes
     """
-    channels: int = 7
+    channels: int = 8
     mask_to_boxes_mode: str = "components"
     min_box_area_px: int = 10
 
@@ -277,9 +277,9 @@ def export_yolo_det7_dataset(
     def dump(loader, split: str):
         idx = 0
         for images, masks in loader:
-            # images: (B,7,H,W), masks: (B,H,W)
+            # images: (B,C,H,W), masks: (B,H,W)
             for i in range(images.shape[0]):
-                img7 = images[i]  # (7,H,W) float
+                img7 = images[i]  # (C,H,W) float
                 mask = masks[i].detach().cpu().numpy().astype(np.int32)  # (H,W) int
 
                 if img7.shape[0] != export_cfg.channels:
@@ -289,9 +289,9 @@ def export_yolo_det7_dataset(
                     raise ValueError(f"Mask max={int(mask.max())} but num_classes={num_classes}.")
 
                 # ---------------------------------------------------------------------
-                # IMAGE EXPORT (7-channel)
+                # IMAGE EXPORT (8-channel)
                 # ---------------------------------------------------------------------
-                img_uint8_chw = scale_to_uint8_per_channel_minmax(img7)  # (7,H,W) uint8
+                img_uint8_chw = scale_to_uint8_per_channel_minmax(img7)  # (C,H,W) uint8
 
                 # ---------------------------------------------------------------------
                 # LABEL EXPORT (mask -> detection)
@@ -347,7 +347,7 @@ def export_yolo_det7_dataset(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Export 7-channel patches to YOLO DETECT format and train YOLOv8."
+        description="Export 8-channel patches to YOLO DETECT format and train YOLOv8."
     )
     parser.add_argument("--patches_dir", type=Path, required=True, help="Root dir with train/val splits of .npy patches.")
     parser.add_argument("--output_dir", type=Path, required=True, help="Where to write exported dataset + YOLO runs.")
@@ -378,7 +378,7 @@ def main():
     )
 
     export_cfg = ExportDet7Cfg(
-        channels=7,
+        channels=8,
         mask_to_boxes_mode=args.mask_to_boxes_mode,
         min_box_area_px=args.min_box_area_px,
     )
