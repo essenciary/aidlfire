@@ -5,7 +5,7 @@ Usage:
     from inference_unet_scratch import UNetScratchInferencePipeline
 
     pipeline = UNetScratchInferencePipeline("checkpoints/best_model.pt")
-    result = pipeline.predict_from_array(image_array)  # (H, W, 7) or (H, W, 8)
+    result = pipeline.predict_from_array(image_array)  # (H, W, 8)
     result = pipeline.predict_from_file("satellite_image.tif")
 
 Model output:
