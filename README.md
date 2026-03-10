@@ -86,7 +86,7 @@ in their behavior, their speed and their destructive capacity.
 
 Disastrous blazes increased more than fourfold from 1980 to 2023
 according to a paper in the journal Science. (Calum X. Cunningham1\*,
-2025). Based on that paper, disastrous wildfires occurred globally but
+2025) [^1]. Based on that paper, disastrous wildfires occurred globally but
 were disproportionately concentrated in the Mediterranean and Temperate
 Conifer Forest biomes, and in populated regions that experience intense
 fire. Major economic losses caused by wildfire events increased by 4.4
@@ -2014,14 +2014,14 @@ lead to new hypothesis)*
 
 # Bibliography
 
-Calum X. Cunningham1\*, J. T. (2025). Climate-linked escalation of
+[^1]:Calum X. Cunningham1\*, J. T. (2025). Climate-linked escalation of
 societally disastrous 1 wildfires. *Science Vol 390, Issue 6768*, 53-58.
 
-Fernando Rodriguez-Jimenez, H. L.-A. (2023). PLS-PM analysis of forest
+[^2] Fernando Rodriguez-Jimenez, H. L.-A. (2023). PLS-PM analysis of forest
 fires using remote sensing tools. The case of Xur´es in the
 Transboundary Biosphere Reserve. *Ecological informatics Volume 75*.
 
-Filipponi, F. (2019). Exploitation of Sentinel-2 Time Series to Map
+[^3] Filipponi, F. (2019). Exploitation of Sentinel-2 Time Series to Map
 Burned Areas at the National Level: A Case Study on the 2017 Italy
 Wildfires. *Remote Sensing*.
 
