@@ -15,7 +15,6 @@ Usage:
 import argparse
 import json
 import os
-import sys
 from pathlib import Path
 
 import torch
@@ -34,24 +33,7 @@ from dataset import (
 from model import FireSegmentationModel, CombinedLoss
 from metrics import CombinedMetrics
 from sen2fire_dataset import Sen2FireDataset
-
-
-def setup_wandb(config: dict, project: str, run_name: str | None = None, wandb_dir: Path | None = None):
-    """Initialize Weights & Biases logging."""
-    try:
-        if wandb_dir is not None:
-            os.environ.setdefault("WANDB_DIR", str(wandb_dir))
-        site_packages = [p for p in sys.path if "site-packages" in p]
-        if site_packages:
-            sys.path.insert(0, site_packages[0])
-        import wandb
-        if site_packages:
-            sys.path.pop(0)
-        wandb.init(project=project, name=run_name, config=config)
-        return wandb
-    except ImportError:
-        print("Warning: wandb not installed. Install with: pip install wandb")
-        return None
+from wandb_utils import setup_wandb
 
 
 def save_checkpoint(
@@ -171,9 +153,11 @@ def main():
     parser.add_argument("--save-every", type=int, default=5)
     parser.add_argument("--patience", type=int, default=10)
     parser.add_argument("--overwrite-output-dir", action="store_true")
-    parser.add_argument("--wandb", action="store_true", help="Enable W&B logging")
+    parser.add_argument("--skip-wandb", action="store_true", help="Disable W&B logging (enabled by default)")
+    parser.add_argument("--wandb-offline", action="store_true", help="W&B offline mode (no login, sync later with 'wandb sync')")
+    parser.add_argument("--wandb-api-key", type=str, default=None, metavar="KEY", help="W&B API key (or set WANDB_API_KEY env var)")
     parser.add_argument("--project", type=str, default="fire-detection", help="W&B project name")
-    parser.add_argument("--run-name", type=str, default=None, help="W&B run name")
+    parser.add_argument("--run-name", type=str, default=None, help="W&B run name (default: output-dir basename, e.g. v3_combined_binary_resnet34_unet)")
 
     args = parser.parse_args()
 
@@ -247,9 +231,36 @@ def main():
         pin_memory=True,
     )
 
+    config = {
+        "patches_dir": str(args.patches_dir),
+        "sen2fire_dir": str(args.sen2fire_dir),
+        "num_classes": 2,
+        "in_channels": in_channels,
+        "dual_head": False,
+        "encoder_name": args.encoder,
+        "architecture": args.architecture,
+        "combined_binary": True,
+        "batch_size": args.batch_size,
+        "epochs": args.epochs,
+        "lr": args.lr,
+    }
+    wandb_run = None
+    if not args.skip_wandb:
+        run_name = args.run_name or args.output_dir.name
+        wandb_run = setup_wandb(
+            config,
+            args.project,
+            run_name,
+            wandb_dir=args.output_dir / "wandb",
+            api_key=args.wandb_api_key,
+            offline=args.wandb_offline,
+        )
+
     print(f"\n{'='*60}")
     print("  PHASE 1: COMBINED BINARY TRAINING (CEMS + Sen2Fire)")
     print(f"{'='*60}")
+    if wandb_run:
+        print("  W&B: Logging enabled")
     print(f"  CEMS train: {len(cems_train)} | Sen2Fire train: {len(sen2fire_train)} | Total: {len(train_dataset)}")
     print(f"  CEMS val: {len(cems_val)} | Sen2Fire val: {len(sen2fire_val)} | Total: {len(val_dataset)}")
     print(f"  Channels: {in_channels} (NDVI: {include_ndvi})")
@@ -280,25 +291,8 @@ def main():
         optimizer, mode="max", factor=0.5, patience=5,
     )
 
-    config = {
-        "patches_dir": str(args.patches_dir),
-        "sen2fire_dir": str(args.sen2fire_dir),
-        "num_classes": 2,
-        "in_channels": in_channels,
-        "dual_head": False,
-        "encoder_name": args.encoder,
-        "architecture": args.architecture,
-        "combined_binary": True,
-        "batch_size": args.batch_size,
-        "epochs": args.epochs,
-        "lr": args.lr,
-    }
     with open(args.output_dir / "config.json", "w") as f:
         json.dump(config, f, indent=2)
-
-    wandb_run = None
-    if args.wandb:
-        wandb_run = setup_wandb(config, args.project, args.run_name, wandb_dir=args.output_dir / "wandb")
 
     class_names = list(get_class_names(2))
     train_metrics = CombinedMetrics(num_classes=2, class_names=class_names)

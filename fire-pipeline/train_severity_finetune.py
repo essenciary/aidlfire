@@ -19,6 +19,7 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -32,6 +33,7 @@ from dataset import (
 )
 from model import FireDualHeadModel, CombinedLoss
 from metrics import CombinedMetrics
+from wandb_utils import setup_wandb
 
 
 def load_binary_checkpoint_for_severity_finetune(
@@ -104,6 +106,11 @@ def train_epoch(
 
         optimizer.zero_grad()
         _, severity_logits = model(images)
+        # Some architectures (e.g. DeepLabV3+) output at reduced resolution; upsample to match masks
+        if severity_logits.shape[-2:] != masks.shape[-2:]:
+            severity_logits = F.interpolate(
+                severity_logits, size=masks.shape[-2:], mode="bilinear", align_corners=False
+            )
         result = criterion(severity_logits, masks)
         loss = result[0] if isinstance(result, tuple) else result
 
@@ -143,6 +150,10 @@ def validate_epoch(
         masks = masks.to(device)
 
         _, severity_logits = model(images)
+        if severity_logits.shape[-2:] != masks.shape[-2:]:
+            severity_logits = F.interpolate(
+                severity_logits, size=masks.shape[-2:], mode="bilinear", align_corners=False
+            )
         result = criterion(severity_logits, masks)
         loss = result[0] if isinstance(result, tuple) else result
 
@@ -195,6 +206,11 @@ def main():
     parser.add_argument("--save-every", type=int, default=5)
     parser.add_argument("--patience", type=int, default=5)
     parser.add_argument("--overwrite-output-dir", action="store_true")
+    parser.add_argument("--skip-wandb", action="store_true", help="Disable W&B logging (enabled by default)")
+    parser.add_argument("--wandb-offline", action="store_true", help="W&B offline mode (no login, sync later with 'wandb sync')")
+    parser.add_argument("--wandb-api-key", type=str, default=None, metavar="KEY", help="W&B API key (or set WANDB_API_KEY env var)")
+    parser.add_argument("--project", type=str, default="fire-detection", help="W&B project name")
+    parser.add_argument("--run-name", type=str, default=None, help="W&B run name (default: output-dir basename)")
 
     args = parser.parse_args()
 
@@ -223,16 +239,42 @@ def main():
         num_workers=args.num_workers,
         train_augment=get_training_augmentation(),
         fire_augment=fire_augment,
+        drop_last=True,
     )
 
     train_loader = data_module.train_dataloader()
     val_loader = data_module.val_dataloader()
+
+    config_wandb = {
+        "checkpoint": str(args.checkpoint),
+        "patches_dir": str(args.patches_dir),
+        "num_classes": 5,
+        "in_channels": in_channels,
+        "dual_head": True,
+        "severity_finetune": True,
+        "batch_size": args.batch_size,
+        "epochs": args.epochs,
+        "lr": args.lr,
+    }
+    wandb_run = None
+    if not args.skip_wandb:
+        run_name = args.run_name or args.output_dir.name
+        wandb_run = setup_wandb(
+            config_wandb,
+            args.project,
+            run_name,
+            wandb_dir=args.output_dir / "wandb",
+            api_key=args.wandb_api_key,
+            offline=args.wandb_offline,
+        )
 
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     total = sum(p.numel() for p in model.parameters())
     print(f"\n{'='*60}")
     print("  PHASE 2: SEVERITY FINE-TUNING (CEMS GRA)")
     print(f"{'='*60}")
+    if wandb_run:
+        print("  W&B: Logging enabled")
     print(f"  Train samples: {len(data_module.train_dataset)}")
     print(f"  Val samples: {len(data_module.val_dataset)}")
     print(f"  Trainable params: {trainable:,} / {total:,} (encoder + binary frozen)")
@@ -278,6 +320,19 @@ def main():
 
         print(f"\nEpoch {epoch} | Train loss: {train_results['loss']:.4f} | Val loss: {val_results['loss']:.4f} | Val mean IoU: {val_results['mean_iou']:.4f} | Val fire IoU: {val_results['fire_iou']:.4f}")
 
+        if wandb_run:
+            wandb_run.log({
+                "epoch": epoch,
+                "train/loss": train_results["loss"],
+                "train/mean_iou": train_results["mean_iou"],
+                "train/fire_iou": train_results["fire_iou"],
+                "val/loss": val_results["loss"],
+                "val/mean_iou": val_results["mean_iou"],
+                "val/fire_iou": val_results["fire_iou"],
+                "val/fire_recall": val_results["fire_recall"],
+                "lr": optimizer.param_groups[0]["lr"],
+            })
+
         if val_results["mean_iou"] > best_metric:
             best_metric = val_results["mean_iou"]
             epochs_without_improvement = 0
@@ -294,6 +349,8 @@ def main():
             break
 
     save_checkpoint(model, optimizer, epoch, val_results, checkpoints_dir / "final_model.pt", config_save)
+    if wandb_run:
+        wandb_run.finish()
     print(f"\nDone. Best Val mean IoU: {best_metric:.4f}")
     print(f"Checkpoints: {checkpoints_dir}")
     print("\nDual-head model ready for inference (binary + severity maps).")

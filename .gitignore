@@ -64,6 +64,8 @@ _patches_*/
 checkpoints/
 output/
 outputs/
+_output_*/
+output_*/
 runs/
 logs/
 *.ckpt
