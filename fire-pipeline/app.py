@@ -1172,25 +1172,29 @@ def render_history():
     # Display as cards
     for record in history:
         with st.container():
-            col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
+            col1, col2, col3, col4, col5, col6 = st.columns([2, 1.5, 1, 1, 1, 1])
 
             with col1:
                 st.markdown(f"**{record.scene_id}**")
                 st.caption(record.created_at.strftime("%Y-%m-%d %H:%M") if record.created_at else "Unknown")
 
             with col2:
+                model_name = (record.metadata or {}).get("model_name")
+                st.caption(model_name or "—")
+
+            with col3:
                 if record.has_fire:
                     st.markdown("🔥 **Fire**")
                 else:
                     st.markdown("✅ Clear")
 
-            with col3:
+            with col4:
                 st.markdown(f"Conf: {record.fire_confidence:.0%}")
 
-            with col4:
+            with col5:
                 st.markdown(f"☁️ {record.cloud_cover:.0f}%")
 
-            with col5:
+            with col6:
                 if st.button("View", key=f"view_{record.id}"):
                     st.session_state["view_analysis"] = record.id
                     st.rerun()
