@@ -104,3 +104,9 @@ flowchart TB
 - **Phase 2 = severity fine-tuning:** Adds a 1×1 conv severity head on shared decoder; encoder and binary head frozen
 - **Alternative:** `train_sen2fire_finetune.py` — fine-tune CEMS model on Sen2Fire (binary head only, severity frozen)
 - **Output:** Dual-head model for inference — binary fire map + severity map in one forward pass
+
+---
+
+## See Also
+
+- [Training Pipeline](TRAINING_PIPELINE.md) — Full training scripts, commands, and options
