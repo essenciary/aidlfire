@@ -53,8 +53,8 @@ pre, code { font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", "Source
 │  └──────┬───────┘    └──────────────┘    └──────────────────────┘  │
 │         │                     │                      │              │
 └─────────┼─────────────────────┼──────────────────────┼──────────────┘
-          │                     │                      │
-          ▼                     ▼                      ▼
+          ▲                     ▲                      ▼
+          │ imagery             │ model                │ results
 ┌─────────────────┐    ┌──────────────┐    ┌──────────────────────┐
 │ Planetary       │    │ PyTorch      │    │ Local cache/         │
 │ Computer (STAC) │    │ model.pt     │    │ database.db          │
@@ -82,9 +82,9 @@ flowchart LR
     end
 
     A --> B
-    B --> E
+    E --> B
     B --> C
-    C --> F
+    F --> C
     C --> D
     D --> G
 ```
