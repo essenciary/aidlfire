@@ -110,3 +110,15 @@ streamlit run app.py
 ```
 
 Set `FIRE_USE_MOCK=false` for real Sentinel-2 data. Use `FIRE_MODELS_DIR` to enable multi-model dropdown.
+
+---
+
+## Executive Summary
+
+- **Web app** for satellite-based wildfire detection and severity mapping
+- **Image source:** Sentinel-2 L2A from Microsoft Planetary Computer (STAC API)
+- **Streamlit** frontend; PyTorch U-Net inference
+- **Select region** via map, presets, or coordinates; fetch imagery with date and cloud filters
+- **Binary fire map** and **5-level severity** in one forward pass; synced zoom/pan viewer
+- **History** and **statistics**; filter by fire/date; load parameters to re-run
+- **Multi-model** support; local SQLite + file cache for analyses
