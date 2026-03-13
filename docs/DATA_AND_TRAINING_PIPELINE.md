@@ -61,6 +61,8 @@ flowchart TB
 - **Cloud filter:** Patches with >50% cloud cover rejected
 - **Output:** `.npy` files — image (256,256,8) float32, mask (256,256) uint8
 - **Mask types:** DEL (binary 0/1) for fire detection; GRA (0–4) for severity
+- **Imbalance:** ~4% images with no fire; class weights (inverse frequency) applied in training
+- **Augmentation:** Flips, 90° rotations, brightness/contrast, Gaussian noise; stronger augmentation for fire patches
 
 ---
 
@@ -135,3 +137,8 @@ flowchart TB
 **Why two phases?**
 - Phase 1: Maximize fire examples from two continents → better generalization
 - Phase 2: Severity labels only in CEMS → train dedicated head without diluting binary performance
+
+**Training details**
+- **Loss:** CombinedLoss (0.5 × CrossEntropy + 0.5 × Dice), class weights
+- **Optimizer:** AdamW
+- **Regularization:** Weight decay, early stopping, ReduceLROnPlateau
