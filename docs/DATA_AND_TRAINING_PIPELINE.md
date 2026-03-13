@@ -32,6 +32,27 @@ pre, code { font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", "Source
 └───────────────┘      └──────────┘                 └──────────┘
 ```
 
+### Mermaid
+
+```mermaid
+flowchart TB
+    subgraph RAW["Raw Data"]
+        A["CEMS GeoTIFF (Europe)"]
+        B["Sen2Fire .npz (Australia)"]
+    end
+
+    subgraph PATCH["Patch Generation"]
+        C["7 bands + NDVI"]
+        D["patches (DEL)"]
+        E["patches_gra (GRA)"]
+    end
+
+    A --> C
+    B --> C
+    C --> D
+    C --> E
+```
+
 ### Bullet points
 
 - **Input:** CEMS GeoTIFF (12 bands) or Sen2Fire .npz; 7 bands selected (B02, B03, B04, B08, B8A, B11, B12)
@@ -70,6 +91,29 @@ pre, code { font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", "Source
     │   Train: severity head only     │◀───────────────┘
     │   Output: dual-head model       │
     └─────────────────────────────────┘
+```
+
+### Mermaid
+
+```mermaid
+flowchart TB
+    subgraph P1["Phase 1: Binary"]
+        A["CEMS DEL"]
+        B["Sen2Fire"]
+        C["Binary model (2 classes)"]
+    end
+
+    subgraph P2["Phase 2: Severity"]
+        D["Phase 1 checkpoint"]
+        E["CEMS GRA"]
+        F["Dual-head (binary + severity)"]
+    end
+
+    A --> C
+    B --> C
+    C --> D
+    D --> F
+    E --> F
 ```
 
 ### Bullet points
