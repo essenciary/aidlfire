@@ -169,7 +169,9 @@ See `docs/COMBINED_BINARY_SEVERITY_WORKFLOW.md` for full details.
 | Augmentation code | `fire-pipeline/dataset.py` |
 | Model architecture | `fire-pipeline/model.py` |
 | Training script | `fire-pipeline/train.py` |
-| Training pipeline overview | `docs/TRAINING_PIPELINE.md` |
+| Data pipeline | `docs/DATA_PIPELINE.md` |
+| Training pipeline | `docs/TRAINING_PIPELINE.md` |
+| Data & training pipeline (consolidated slides) | `docs/DATA_AND_TRAINING_PIPELINE.md` |
 | Evaluation metrics | `fire-pipeline/metrics.py` |
 | Pipeline usage | `fire-pipeline/README.md` |
 | Combined binary + severity workflow | `docs/COMBINED_BINARY_SEVERITY_WORKFLOW.md` |

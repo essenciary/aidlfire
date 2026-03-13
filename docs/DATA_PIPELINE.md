@@ -109,4 +109,5 @@ flowchart TB
 
 ## See Also
 
-- [Training Pipeline](TRAINING_PIPELINE.md) — Full training scripts, commands, and options
+- [Data & Training Pipeline](DATA_AND_TRAINING_PIPELINE.md) — Consolidated slide-ready overview
+- [Training Pipeline](TRAINING_PIPELINE.md) — Training workflow details

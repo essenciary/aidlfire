@@ -101,6 +101,7 @@ flowchart TB
 ## See Also
 
 - [Data Pipeline](DATA_PIPELINE.md) — Patch generation and data flow
+- [Data & Training Pipeline](DATA_AND_TRAINING_PIPELINE.md) — Consolidated slide-ready overview
 - [Combined Binary + Severity Workflow](COMBINED_BINARY_SEVERITY_WORKFLOW.md) — Rationale
 - [V3 Pipeline Architectures](V3_PIPELINE_ARCHITECTURES.md) — Encoder/decoder options
 - [ResNet50 + U-Net++ Architecture](RESNET50_UNETPP_ARCHITECTURE.md) — Best model details
