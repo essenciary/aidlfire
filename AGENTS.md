@@ -180,6 +180,7 @@ See `docs/COMBINED_BINARY_SEVERITY_WORKFLOW.md` for full details.
 | Patch generation | `fire-pipeline/patch_generator.py` |
 | Inference pipeline | `fire-pipeline/inference.py` |
 | Web app | `fire-pipeline/app.py` |
+| App overview (tech, features, architecture) | `docs/APP.md` |
 | Satellite data fetching | `fire-pipeline/satellite_fetcher.py` |
 | Local storage/caching | `fire-pipeline/storage.py` |
 

@@ -61,7 +61,7 @@ flowchart TB
 - **Cloud filter:** Patches with >50% cloud cover rejected
 - **Output:** `.npy` files — image (256,256,8) float32, mask (256,256) uint8
 - **Mask types:** DEL (binary 0/1) for fire detection; GRA (0–4) for severity
-- **Imbalance:** ~4% images with no fire; class weights (inverse frequency) applied in training
+- **Imbalance:** At pixel level, fire is rare (~10% of pixels); at patch level, many patches are no-fire (e.g. ~27%+). Class weights (inverse frequency) applied in training
 - **Augmentation:** Flips, 90° rotations, brightness/contrast, Gaussian noise; stronger augmentation for fire patches
 
 ---
