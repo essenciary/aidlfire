@@ -762,15 +762,7 @@ Training configuration determines how the model learns from data. This includes 
 
 After Phase 1 (CEMS binary training), we fine-tune on Sen2Fire to improve generalization to Australian bushfire imagery:
 
-```bash
-python fire-pipeline/train_sen2fire_finetune.py \
-  --checkpoint output/v3_binary/resnet50_unetpp/best_model.pt \
-  --sen2fire-dir ../data-sen2fire \
-  --output-dir output/sen2fire_finetune \
-  --epochs 20 \
-  --lr 1e-5 \
-  --max-cloud-score 0.3
-```
+
 
 ### Our Training Strategy: CEMS First, Then Sen2Fire
 
@@ -786,42 +778,7 @@ Final model: dual-head (binary + severity)
 
 ### Training Plan (1)
 
-```bash
-# ResNet50 + U-Net++ (best accuracy)
-python fire-pipeline/train.py \
-  --encoder resnet50 \
-  --decoder unetplusplus \
-  --patches-dir ../patches \
-  --sen2fire-dir ../data-sen2fire \
-  --output-dir output/v3_binary/resnet50_unetpp \
-  --epochs 50 \
-  --batch-size 16 \
-  --lr 1e-4 \
-  --weight-decay 1e-4
 
-# ResNet34 + U-Net (balanced speed/accuracy)
-python fire-pipeline/train.py \
-  --encoder resnet34 \
-  --decoder unet \
-  --patches-dir ../patches \
-  --sen2fire-dir ../data-sen2fire \
-  --output-dir output/v3_binary/resnet34_unet \
-  --epochs 50 \
-  --batch-size 16 \
-  --lr 1e-4 \
-  --weight-decay 1e-4
-
-# MobileNetV2 + U-Net (lightweight)
-python fire-pipeline/train.py \
-  --encoder mobilenet_v2 \
-  --decoder unet \
-  --patches-dir ../patches \
-  --sen2fire-dir ../data-sen2fire \
-  --output-dir output/v3_binary/mobilenet_unet \
-  --epochs 50 \
-  --batch-size 32 \
-  --lr 1e-4 \
-  --weight-decay 1e-4
 ```
 
 ### Cloud Handling for Sen2Fire (no cloud masks)
@@ -842,25 +799,9 @@ Sen2Fire does not include cloud masks. To handle this:
 
 #### Phase 1: Combined Binary Training
 
-```bash
-python fire-pipeline/train.py \
-  --patches-dir ../patches \
-  --sen2fire-dir ../data-sen2fire \
-  --output-dir output/v3_combined_binary \
-  --encoder resnet50 --decoder unetplusplus \
-  --epochs 50 --batch-size 16 --lr 1e-4
-```
 
 #### Phase 2: Severity Fine-Tuning
 
-```bash
-python fire-pipeline/train_severity.py \
-  --checkpoint output/v3_combined_binary/best_model.pt \
-  --patches-gra-dir ../patches_gra \
-  --output-dir output/v3_severity \
-  --encoder resnet50 --decoder unetplusplus \
-  --epochs 30 --batch-size 16 --lr 5e-5
-```
 
 ### Two-Head Model Rationale
 
