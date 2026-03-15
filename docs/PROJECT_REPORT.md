@@ -360,7 +360,11 @@ uv run python train_combined_binary.py \
 
 Training time for ResNet50 + U-Net++: approximately 30 minutes on a single NVIDIA L4 GPU.
 
-W&B run: [v3_combined_binary_resnet50_unetpp](https://wandb.ai/adrian-corvin-salceanu-upc-barcelona/fire-detection/runs/7ql5q0zk)
+![W&B metrics dashboard — IoU, Dice and loss tracking](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image33.png)
+
+![W&B hyperparameter comparison view](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image34.png)
+
+![Loss and fire IoU evolution over epochs](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image35.png)
 
 **Conclusions:**
 
@@ -408,7 +412,7 @@ uv run python train_severity_finetune.py \
 
 Training time: approximately 10–20 minutes per model.
 
-W&B run: [v3_finetune_severity_resnet50_unetp](https://wandb.ai/adrian-corvin-salceanu-upc-barcelona/fire-detection/runs/sb5t3qp4)
+![ResNet34 U-Net++ vs U-Net baseline comparison](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image36.png)
 
 **Conclusions:**
 
@@ -525,7 +529,9 @@ A compact U-Net with no pretrained encoder, tuned by Ray Tune, can achieve compe
 
 Best result: **Fire IoU 0.745, Fire Dice 0.854, Mean IoU 0.853**.
 
-W&B run (best): [unet-scratch+s2f-tune-top3-lr1.2e-04-wd2.2e-05-bs32](https://wandb.ai/adrian-corvin-salceanu-upc-barcelona/fire-detection/runs/s89w94t8)
+![Training metrics — scratch architectures and hyperparameter tuning](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image38.png)
+
+![Training metrics — fire IoU across runs](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image39.png)
 
 Training time: 1,082–1,604 seconds per run (~18–27 minutes) on a single GPU.
 
@@ -610,9 +616,6 @@ Architecture: CSPDarknet backbone → FPN neck → dual-head (detection + segmen
 
 The first convolutional layer was adapted to accept 8-channel input. Pretrained weights from COCO (ImageNet-derived) initialize the backbone.
 
-![YOLOv8-Seg dual output — bounding boxes and instance masks](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image25.png)
-
-![YOLOv8-Seg architecture diagram](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image26.png)
 
 #### Hypothesis
 
@@ -665,15 +668,13 @@ uv run python train.py \
 
 Best result: **mAP50-95 0.4397**.
 
-W&B run (best): [yolo+s2f-tune-top1-lr7.8e-03-wd6.7e-04-b](https://wandb.ai/adrian-corvin-salceanu-upc-barcelona/fire-detection/runs/upbdth1b)
-
 Training time: the slowest model family — approximately 63–70 minutes per run.
-
-![YOLO hyperparameter tuning — 3 runs on map50_95](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image37.png)
 
 #### Conclusions
 
-YOLO achieves decent but not strong mAP50-95 (0.44). While the detection-style formulation offers instance-level fire tracking — a genuine advantage when multiple separate fire fronts are present in a scene — the task formulation itself limits performance for burned area mapping. Burned areas are large, spatially diffuse regions that span much of a tile, not discrete objects with clear bounding boxes. YOLO's anchor-based detection head struggles with such patterns. Moreover, YOLO's pretrained COCO weights provide a poor initialization for 8-channel satellite data: the backbone learned features for RGB natural images, not multispectral fire signatures. The domain gap is larger for YOLO than for SMP models, which use ImageNet weights but are architecturally better suited to pixel-wise tasks. YOLO training was also the most computationally expensive (70+ minutes per run on GPU) due to the full Ultralytics training pipeline.
+YOLO achieves the weakest results (mAP50-95 0.44) of all models evaluated. The main reason is a significant **domain gap** between COCO (the source of YOLO's pretrained weights) and satellite wildfire imagery. COCO contains everyday RGB photographs of objects at human scale; our data consists of 8-channel multispectral Sentinel-2 images of burned landscapes seen from 10 m altitude. The backbone never saw anything resembling fire scars, smoke plumes, or multispectral reflectance patterns during pretraining. As a result, the pretrained features transfer poorly and the model must relearn relevant representations with very limited domain-specific data.
+
+Beyond the domain gap, the detection-style task formulation is a poor fit for burned area mapping. Burned areas are large, spatially diffuse regions that span most of a tile — not discrete objects with clear bounding boxes. YOLO's detection head is designed for locating individual objects, so it struggles with fire perimeters that are irregular and occupy the majority of the scene. Pixel-wise segmentation models are fundamentally better suited to this problem.
 
 ---
 
@@ -695,19 +696,13 @@ YOLO achieves decent but not strong mAP50-95 (0.44). While the detection-style f
 
 ### Discussion
 
-**Pretrained SMP vs. scratch:** The gap between the best pretrained model (ResNet50 U-Net++, Fire IoU 0.779) and the best scratch model (U-Net Scratch, Fire IoU 0.745) is modest: 0.034. Given that the scratch model has 415× fewer parameters, this result highlights that the U-Net architectural inductive bias is extremely well-suited for satellite fire segmentation. The pretrained encoder provides robust high-level features and slightly better generalization, which is why we recommend it for production; but the scratch model is competitive and far more efficient.
+The gap between the best pretrained model (ResNet50 U-Net++, Fire IoU 0.779) and the best scratch model (U-Net Scratch, Fire IoU 0.745) is only 0.034, despite a 415× difference in parameters. This highlights the strength of the U-Net inductive bias for satellite fire segmentation. Pretrained encoders add a small but consistent performance boost and better generalization, justifying their use in the final application.
 
-**Pixel-wise segmentation vs. detection:** The comparison between YOLO (mAP50-95 0.44) and all segmentation models (Fire IoU 0.75–0.78) confirms that pixel-wise segmentation is the right task formulation for burned area mapping. Bounding box detection cannot capture the irregular geometry of fire perimeters, and mAP50-95 penalizes poor localization of these diffuse regions. Segmentation models that predict a class label per pixel are fundamentally better matched to the burned area mapping problem.
-
-**Severity segmentation:** Mean IoU of 0.34 for 5-class severity is within the expected range for multi-class remote sensing segmentation (0.30–0.50). The severity task is inherently harder: the "no damage" class dominates the scene, fine-grained severity boundaries are ambiguous even for human annotators, and the training data for GRA is a subset of the CEMS data (not all activations have severity labels). The Fire IoU for severity (0.407) confirms that burned-area localization remains solid even when the model must simultaneously distinguish severity levels.
-
-**CNN Scratch limitations:** The moderate F1 (0.60) and low precision (0.36) of the CNN patch classifier reflect the fundamental limitation of patch-level classification: a single fire pixel makes a 256×256 patch a positive, producing an extremely difficult signal. The high AUC (0.94) suggests the model has learned something meaningful, but binary thresholding on patch-level labels is not a reliable operational approach. This architecture was not selected for the application.
+Pixel-wise segmentation clearly outperforms detection (YOLO mAP50-95 0.44) for burned area mapping — bounding boxes cannot capture the irregular, diffuse geometry of fire perimeters. Severity segmentation (Mean IoU 0.34) is harder than binary detection by design: five classes with ambiguous boundaries and a dominant "no damage" class. The CNN patch classifier's low precision (0.36) reflects the limitations of patch-level labels, where a single fire pixel labels an entire 256×256 patch as positive.
 
 ### Resource Consumption
 
 ![W&B GPU system metrics dashboard](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image40.png)
-
-![GPU power and SM clock speed detail](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image41.png)
 
 GPU utilization during training:
 - U-Net scratch: most consistent high utilization (50–75%)
@@ -716,8 +711,6 @@ GPU utilization during training:
 - DeepLabV3+ (severity): GPU SM clock dropped to 300–500 MHz due to data pipeline bottleneck
 
 No ECC memory errors were observed across any run, indicating stable VRAM behavior throughout the training campaign.
-
-![Validation metrics dashboard — val/fire_iou, fire_recall, fire_precision](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image42.png)
 
 ---
 
@@ -733,20 +726,21 @@ Two models were selected for integration into the fire detection application:
 - ~49M parameters, 188 MB checkpoint, ~20–40 ms/patch inference on GPU
 - Requires ~4 GB GPU memory for inference
 
-### ResNet34 + U-Net (Secondary)
+### U-Net from Scratch (Secondary)
 
-**Fire IoU 0.765** — excellent balance of speed and performance. Available as an alternative in the app.
+**Fire IoU 0.745** — strong results despite being trained entirely from scratch with no pretrained weights. Selected as a lightweight alternative when GPU memory or model size is constrained.
 
-- ~24.5M parameters, 94 MB checkpoint, ~10–20 ms/patch inference on GPU
-- Requires ~2 GB GPU memory for inference
+- ~118K parameters — 415× smaller than ResNet50 U-Net++
+- Binary fire detection only (no severity output)
+- Fast inference, very small checkpoint footprint
+
+Despite operating without any transfer learning, the U-Net from scratch comes remarkably close to the best pretrained model (only 0.034 Fire IoU below ResNet50 U-Net++). This demonstrates that the U-Net encoder-decoder architecture with skip connections is highly effective for satellite fire segmentation even when learned entirely from the task data.
 
 ### Why the other models were not selected
 
-**U-Net Scratch** achieves Fire IoU 0.745 with only ~118K parameters. While it is a strong result for a scratch model, it does not produce a severity (GRA) output — its training was binary-only. The dual-head capability of the SMP models (binary + severity in one pass) makes them more suitable for the application use case that requires both outputs. U-Net Scratch remains an excellent option if only binary detection is needed and memory is constrained.
+**CNN Scratch** performs patch-level classification, not pixel-wise segmentation. It cannot produce per-pixel fire masks required for area estimation, perimeter calculation, or map overlays. Its F1 of 0.60 with precision 0.36 also reflects operational unreliability.
 
-**CNN Scratch** was not selected because it performs patch-level classification, not pixel-wise segmentation. It cannot produce the per-pixel fire masks required for area estimation, perimeter calculation, and map overlays. The F1 of 0.60 with precision 0.36 also reflects operational unreliability.
-
-**YOLO** was not selected because: (1) mAP50-95 0.44 is lower than SMP segmentation (Fire IoU ~0.78); (2) the detection-style output (bounding boxes) does not support precise fire area or perimeter calculations; (3) YOLO's pretrained COCO weights provide poor initialization for 8-channel satellite fire data; (4) inference is slower per patch than the SMP models; (5) pixel-wise segmentation is fundamentally better suited for burned area mapping.
+**YOLO** was not selected because: (1) mAP50-95 0.44 is the lowest result of all models; (2) the detection-style output (bounding boxes) does not support precise fire perimeter calculations; (3) YOLO's pretrained COCO weights provide poor initialization for 8-channel satellite fire data; (4) training was the most computationally expensive (70+ minutes per run); (5) pixel-wise segmentation is fundamentally better suited for burned area mapping.
 
 ---
 
