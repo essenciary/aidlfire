@@ -69,9 +69,9 @@ Earth Observation satellites provide near-real-time (NRT) data streams for fire 
 
 As of 2018, researchers began mapping fire using Sentinel-2 data (Fernando Rodriguez-Jimenez, 2023). The new generation of geostationary satellites improves spatial resolution to 2–3 km, enabling detection of short-lived fires that polar-orbiting satellites miss. These sensors provide 12–16 spectral bands with improved radiometry, creating a strong foundation for deep learning approaches trained on spectrally rich data.
 
-![Dataset sources overview](media/image3.png)
+![Dataset sources overview](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image3.png)
 
-![Dataset annotation examples](media/image4.png)
+![Dataset annotation examples](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image4.png)
 
 ### 2.4 Our Approach to Wildfire Detection
 
@@ -86,7 +86,7 @@ The data selection criteria required: Sentinel-2 imagery (same sensor as the ope
 
 The complete pipeline follows nine steps: data ingestion → preprocessing → patch extraction → augmentation → Phase 1 binary training → Phase 2 severity fine-tuning → evaluation → inference → application. Experiment tracking was performed with Weights & Biases (W&B).
 
-![Complete pipeline diagram](media/image14.png)
+![Complete pipeline diagram](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image14.png)
 
 ---
 
@@ -115,9 +115,9 @@ The **Copernicus Emergency Management Service (CEMS) Wildfire dataset** is the p
 - **CM (Cloud Mask):** 4-class cloud mask generated with CloudSen12 — 0 = clear, 1 = clouds, 2 = light clouds, 3 = shadow.
 - **LC (Land Cover):** Land cover mask from ESRI and ESA WorldCover sources.
 
-![Severity colormap visualization](media/image7.png)
+![Severity colormap visualization](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image7.png)
 
-![Cloud masks from CloudSen12 model for activation EMSR382](media/image12.png)
+![Cloud masks from CloudSen12 model for activation EMSR382](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image12.png)
 
 Each activation provides files following the naming convention:
 ```
@@ -308,9 +308,9 @@ Decoder output
     └── Severity head (1×1 conv, 5 classes) → damage level map (256×256)
 ```
 
-![ResNet50 + U-Net++ architecture](media/image16.png)
+![ResNet50 + U-Net++ architecture](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image16.png)
 
-![ResNet50 + U-Net++ decoder detail](media/image18.png)
+![ResNet50 + U-Net++ decoder detail](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image18.png)
 
 #### Two-Phase Training Pipeline
 
@@ -428,11 +428,11 @@ A notable finding from W&B GPU monitoring: the DeepLabV3+ severity fine-tuning r
 
 **Compute infrastructure:** Google Cloud Platform, instance g2-standard-4 (4 vCPUs, 16 GB RAM), NVIDIA L4 GPU, 500 GB disk, Debian 11.
 
-![W&B metrics dashboard — IoU, Dice and loss tracking](media/image33.png)
+![W&B metrics dashboard — IoU, Dice and loss tracking](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image33.png)
 
-![W&B hyperparameter comparison view](media/image34.png)
+![W&B hyperparameter comparison view](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image34.png)
 
-![Loss and fire IoU evolution over epochs](media/image35.png)
+![Loss and fire IoU evolution over epochs](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image35.png)
 
 ### 4.2 U-Net from Scratch
 
@@ -457,9 +457,9 @@ The U-Net from scratch is a compact segmentation model built with no pretrained 
 
 Skip connections carry high-resolution spatial features from encoder to decoder, preserving precise burn boundary information that would otherwise be lost during downsampling. The architecture intentionally mirrors the SMP U-Net structure but starts from random weights, making it a controlled comparison for the value of ImageNet pretraining.
 
-![Generic U-Net architecture for fire detection](media/image23.png)
+![Generic U-Net architecture for fire detection](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image23.png)
 
-![U-Net scratch architecture used in experiments](media/image24.png)
+![U-Net scratch architecture used in experiments](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image24.png)
 
 #### Hyperparameter Tuning
 
@@ -610,9 +610,9 @@ Architecture: CSPDarknet backbone → FPN neck → dual-head (detection + segmen
 
 The first convolutional layer was adapted to accept 8-channel input. Pretrained weights from COCO (ImageNet-derived) initialize the backbone.
 
-![YOLOv8-Seg dual output — bounding boxes and instance masks](media/image25.png)
+![YOLOv8-Seg dual output — bounding boxes and instance masks](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image25.png)
 
-![YOLOv8-Seg architecture diagram](media/image26.png)
+![YOLOv8-Seg architecture diagram](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image26.png)
 
 #### Hypothesis
 
@@ -669,7 +669,7 @@ W&B run (best): [yolo+s2f-tune-top1-lr7.8e-03-wd6.7e-04-b](https://wandb.ai/adri
 
 Training time: the slowest model family — approximately 63–70 minutes per run.
 
-![YOLO hyperparameter tuning — 3 runs on map50_95](media/image37.png)
+![YOLO hyperparameter tuning — 3 runs on map50_95](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image37.png)
 
 #### Conclusions
 
@@ -705,9 +705,9 @@ YOLO achieves decent but not strong mAP50-95 (0.44). While the detection-style f
 
 ### Resource Consumption
 
-![W&B GPU system metrics dashboard](media/image40.png)
+![W&B GPU system metrics dashboard](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image40.png)
 
-![GPU power and SM clock speed detail](media/image41.png)
+![GPU power and SM clock speed detail](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image41.png)
 
 GPU utilization during training:
 - U-Net scratch: most consistent high utilization (50–75%)
@@ -717,7 +717,7 @@ GPU utilization during training:
 
 No ECC memory errors were observed across any run, indicating stable VRAM behavior throughout the training campaign.
 
-![Validation metrics dashboard — val/fire_iou, fire_recall, fire_precision](media/image42.png)
+![Validation metrics dashboard — val/fire_iou, fire_recall, fire_precision](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image42.png)
 
 ---
 
@@ -779,17 +779,17 @@ The application was tested on the Paüls wildfire (southern Catalonia, July 2025
 
 ### Application Screenshots
 
-![App sidebar navigation](media/image27.png)
+![App sidebar navigation](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image27.png)
 
-![App main map view](media/image28.png)
+![App main map view](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image28.png)
 
-![App fire detection overlay](media/image29.png)
+![App fire detection overlay](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image29.png)
 
-![Paüls wildfire detection — Sentinel-2 imagery with fire overlay](media/image30.png)
+![Paüls wildfire detection — Sentinel-2 imagery with fire overlay](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image30.png)
 
-![App metadata panel — cloud cover, resolution and ground coverage (no fires detected)](media/image31.png)
+![App metadata panel — cloud cover, resolution and ground coverage (no fires detected)](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image31.png)
 
-![App architecture schema — Streamlit + PyTorch + Planetary Computer](media/image32.png)
+![App architecture schema — Streamlit + PyTorch + Planetary Computer](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image32.png)
 
 ### Technical Architecture
 
