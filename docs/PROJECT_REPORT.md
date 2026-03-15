@@ -20,20 +20,21 @@
    - 2.2 [Wildfire Monitoring](#22-wildfire-monitoring)
    - 2.3 [Using Satellite Images for Fire Detection](#23-using-satellite-images-for-fire-detection)
    - 2.4 [Our Approach to Wildfire Detection](#24-our-approach-to-wildfire-detection)
-3. [Datasets](#3-datasets)
-   - 3.1 [CEMS Dataset](#31-cems-dataset)
-   - 3.2 [Sen2Fire Dataset](#32-sen2fire-dataset)
-   - 3.3 [Data Pipeline](#33-data-pipeline)
-4. [Model Architectures and Training](#4-model-architectures-and-training)
-   - 4.1 [SMP Models with Pretrained Encoders](#41-smp-models-with-pretrained-encoders)
-   - 4.2 [U-Net from Scratch](#42-u-net-from-scratch)
-   - 4.3 [CNN from Scratch](#43-cnn-from-scratch)
-   - 4.4 [YOLO](#44-yolo)
-5. [Results Comparison](#5-results-comparison)
-6. [Model Selection for Application](#6-model-selection-for-application)
-7. [Application](#7-application)
-8. [Conclusions](#8-conclusions)
-9. [Bibliography and Resource Links](#9-bibliography-and-resource-links)
+3. [Framework: Cloud Infrastructure and Libraries](#3-framework-cloud-infrastructure-and-libraries)
+4. [Datasets](#4-datasets)
+   - 4.1 [CEMS Dataset](#41-cems-dataset)
+   - 4.2 [Sen2Fire Dataset](#42-sen2fire-dataset)
+   - 4.3 [Data Pipeline](#43-data-pipeline)
+5. [Model Architectures and Training](#5-model-architectures-and-training)
+   - 5.1 [SMP Models with Pretrained Encoders](#51-smp-models-with-pretrained-encoders)
+   - 5.2 [U-Net from Scratch](#52-u-net-from-scratch)
+   - 5.3 [CNN from Scratch](#53-cnn-from-scratch)
+   - 5.4 [YOLO](#54-yolo)
+6. [Results Comparison](#6-results-comparison)
+7. [Model Selection for Application](#7-model-selection-for-application)
+8. [Application](#8-application)
+9. [Conclusions](#9-conclusions)
+10. [Bibliography and Resource Links](#10-bibliography-and-resource-links)
 
 ---
 
@@ -90,9 +91,40 @@ The complete pipeline follows nine steps: data ingestion → preprocessing → p
 
 ---
 
-## 3. Datasets
+## 3. Framework: Cloud Infrastructure and Libraries
 
-### 3.1 CEMS Dataset
+### Cloud Infrastructure
+
+All training runs were executed on **Google Cloud Platform (GCP)**, using instances located in Europe to minimize data transfer latency to Copernicus and Sentinel-2 data sources.
+
+| Resource | Specification |
+|----------|---------------|
+| vCPUs | 4 |
+| RAM | 16 GB |
+| GPU | NVIDIA L4 (24 GB VRAM) |
+| Disk | 500 GB |
+
+The NVIDIA L4 GPU provided sufficient VRAM for all training runs, including the memory-intensive ResNet50 + U-Net++ model (~10–12 GB peak VRAM). Training was managed through shell scripts and Python entry points using **uv** as the package and virtual environment manager.
+
+### Libraries and Frameworks
+
+| Category | Library / Tool |
+|----------|---------------|
+| Deep learning | **PyTorch** — model definition, training loops, loss functions, and inference |
+| Segmentation models | **Segmentation Models PyTorch (SMP)** — pretrained encoder-decoder architectures (U-Net, U-Net++, DeepLabV3+) |
+| Data / arrays | **NumPy** — array manipulation, patch extraction, data augmentation |
+| Geospatial I/O | **rasterio** — reading and writing multi-band GeoTIFF files (Sentinel-2 imagery and masks) |
+| Hyperparameter tuning | **Ray Tune** — distributed hyperparameter search (4 trials, top-3 re-trained) |
+| Experiment tracking | **Weights & Biases (W&B)** — metric logging, run comparison, GPU monitoring |
+| Application | **Streamlit** — interactive web application for inference and visualization |
+| Satellite data access | **planetary-computer** + **pystac-client** — STAC API queries to Microsoft Planetary Computer for Sentinel-2 L2A imagery |
+| Package management | **uv** — fast dependency resolution and virtual environment management |
+
+---
+
+## 4. Datasets
+
+### 4.1 CEMS Dataset
 
 The **Copernicus Emergency Management Service (CEMS) Wildfire dataset** is the primary training source. It is authoritative, expert-labeled, and covers European fire events on the same Sentinel-2 sensor used for operational inference.
 
@@ -132,7 +164,7 @@ Labels were produced by human experts at CEMS: analysts compared pre-fire and po
 
 **Storage:** approximately 37 GB combined (23 GB DEL patches, 14 GB GRA patches after patch extraction).
 
-### 3.2 Sen2Fire Dataset
+### 4.2 Sen2Fire Dataset
 
 The **Sen2Fire dataset** provides geographic diversity by covering Australian bushfires, complementing the European-focused CEMS data.
 
@@ -161,7 +193,7 @@ The **Sen2Fire dataset** provides geographic diversity by covering Australian bu
 
 **Why Sen2Fire matters:** The 4 Australian bushfire scenes from the 2019–2020 season represent a different fire regime from European Mediterranean fires. Training on both datasets forces the model to learn spectral fire signatures that generalize across continents, rather than overfitting to European vegetation and fire behavior patterns.
 
-### 3.3 Data Pipeline
+### 4.3 Data Pipeline
 
 The data pipeline converts raw GeoTIFF (CEMS) and .npz (Sen2Fire) files into normalized 256×256 patch arrays suitable for training. It is implemented primarily in `run_pipeline.py` and `patch_generator.py`.
 
@@ -236,7 +268,7 @@ Splits are done at the **activation level** (not patch level) to prevent data le
 
 ---
 
-## 4. Model Architectures and Training
+## 5. Model Architectures and Training
 
 Four families of models were developed and compared: SMP pretrained encoder-decoder models (primary), U-Net from scratch (secondary primary), CNN from scratch (secondary), and YOLOv8-Seg (secondary). All models receive 8-channel input (7 Sentinel-2 bands + NDVI) and are trained on combined CEMS + Sen2Fire data.
 
@@ -246,7 +278,7 @@ Loss function: combined Binary Cross Entropy + Dice loss (`total = 0.5 × BCE + 
 
 Experiment tracking: Weights & Biases (`fire-detection` project). A total of 59 training runs (46 finished) were tracked.
 
-### 4.1 SMP Models with Pretrained Encoders
+### 5.1 SMP Models with Pretrained Encoders
 
 #### Overview
 
@@ -438,7 +470,7 @@ A notable finding from W&B GPU monitoring: the DeepLabV3+ severity fine-tuning r
 
 ![Loss and fire IoU evolution over epochs](https://raw.githubusercontent.com/essenciary/aidlfire/Branch-Josep-Maria/media/image35.png)
 
-### 4.2 U-Net from Scratch
+### 5.2 U-Net from Scratch
 
 #### Architecture
 
@@ -539,7 +571,7 @@ Training time: 1,082–1,604 seconds per run (~18–27 minutes) on a single GPU.
 
 The hypothesis is confirmed and the results are remarkably strong. A 118K-parameter model with no pretrained weights achieves Fire IoU 0.745 — only 0.034 below the 49M-parameter ResNet50 + U-Net++ (0.779). This demonstrates that the U-Net architectural inductive bias (skip connections, encoder-decoder structure) is highly effective for satellite fire segmentation even without transfer learning. The combination of CEMS + Sen2Fire provides enough fire examples for the model to learn robust spectral patterns from scratch. The high Mean IoU (0.853) indicates good performance on the background class as well, confirming the model does not collapse to always predicting non-fire. This model is an excellent choice when model size matters — for edge deployment, embedded inference, or resource-constrained environments.
 
-### 4.3 CNN from Scratch
+### 5.3 CNN from Scratch
 
 #### Architecture
 
@@ -606,7 +638,7 @@ Training time: approximately 2,441–2,599 seconds per run (~40 minutes).
 
 The CNN classifier achieves moderate patch-level classification performance (F1 0.60). The high AUC (0.94) indicates the model has learned a meaningful ranking of fire probability even if the binary threshold produces imprecise F1. However, the low precision (0.36) indicates many false positives: patches are flagged as fire-containing even when the actual fire pixels occupy only a small fraction of the patch. This is a known limitation of patch-level classification — a single fire pixel in a 256×256 patch generates a positive label, forcing the model to respond to very weak signals. For operational use, pixel-wise segmentation is clearly superior. The CNN Scratch is included as a baseline to understand the difficulty of the classification task.
 
-### 4.4 YOLO
+### 5.4 YOLO
 
 #### Architecture
 
@@ -678,7 +710,7 @@ Beyond the domain gap, the detection-style task formulation is a poor fit for bu
 
 ---
 
-## 5. Results Comparison
+## 6. Results Comparison
 
 ### Summary Table
 
@@ -714,7 +746,7 @@ No ECC memory errors were observed across any run, indicating stable VRAM behavi
 
 ---
 
-## 6. Model Selection for Application
+## 7. Model Selection for Application
 
 Two models were selected for integration into the fire detection application:
 
@@ -744,7 +776,7 @@ Despite operating without any transfer learning, the U-Net from scratch comes re
 
 ---
 
-## 7. Application
+## 8. Application
 
 ### Overview
 
@@ -814,7 +846,7 @@ Streamlit frontend (app.py)
 
 ---
 
-## 8. Conclusions
+## 9. Conclusions
 
 This project demonstrates that deep learning on multispectral satellite imagery can achieve strong performance for wildfire burned area detection and severity assessment. The key findings are:
 
@@ -838,7 +870,7 @@ Future directions include multi-temporal analysis for fire spread detection, aut
 
 ---
 
-## 9. Bibliography and Resource Links
+## 10. Bibliography and Resource Links
 
 ### Bibliography
 
