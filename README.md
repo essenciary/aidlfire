@@ -48,6 +48,7 @@
   - [Features](#features)
   - [Technical Architecture](#technical-architecture)
   - [Application Screenshots](#application-screenshots)
+- [Code](#code)
 - [Conclusions](#conclusions-1)
 - [Bibliography](#bibliography)
 - [Resource Links](#resource-links)
@@ -966,6 +967,13 @@ Streamlit frontend (app.py)\
 ![](images/image24.png)
 
 *App metadata panel --- cloud cover, resolution and ground coverage (no fires detected)*
+
+# Code
+Our repository is divided into several branches, each of which handles different tasks.
+**feature-v3 branch**: app, dual-head and SMP with pre-trained encoders
+**vegetation branch**: CNN built from scratch, YOLO model, U-Net built from scratch and their training pipeline (hyperparameter tuning)
+**montse branch**: various tools for joint training and tracking
+
 
 # Conclusions
 
