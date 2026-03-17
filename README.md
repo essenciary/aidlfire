@@ -18,13 +18,8 @@
     - [Sen2Fire Dataset](#sen2fire-dataset)
   - [Data Pipeline](#data-pipeline)
 - [Model Architectures and Training](#model-architectures-and-training)
-  - [SMP Models with Pretrained Encoders](#smp-models-with-pretrained-encoders)
-    - [Overview](#overview)
-    - [ResNet50 + U-Net++ Architecture (Primary)](#resnet50--u-net-architecture-primary)
-    - [Two-Phase Training Pipeline](#two-phase-training-pipeline)
-      - [Phase 1 — Binary Fire Detection](#phase-1--binary-fire-detection)
-      - [Phase 2 — Severity Fine-Tuning](#phase-2--severity-fine-tuning)
-      - [Compute Resources](#compute-resources)
+  - [CNN from Scratch](#cnn-from-scratch)
+  - [YOLO](#yolo)
   - [U-Net from Scratch](#u-net-from-scratch)
     - [Architecture](#architecture)
     - [Hyperparameter Tuning](#hyperparameter-tuning)
@@ -32,8 +27,13 @@
     - [Experiment Configuration](#experiment-configuration)
     - [Results](#results)
     - [Conclusions](#conclusions)
-  - [CNN from Scratch](#cnn-from-scratch)
-  - [YOLO](#yolo)
+  - [SMP Models with Pretrained Encoders](#smp-models-with-pretrained-encoders)
+    - [Overview](#overview)
+    - [ResNet50 + U-Net++ Architecture (Primary)](#resnet50--u-net-architecture-primary)
+    - [Two-Phase Training Pipeline](#two-phase-training-pipeline)
+      - [Phase 1 — Binary Fire Detection](#phase-1--binary-fire-detection)
+      - [Phase 2 — Severity Fine-Tuning](#phase-2--severity-fine-tuning)
+      - [Compute Resources](#compute-resources)  
   - [Results Comparison](#results-comparison)
     - [Summary Table](#summary-table)
     - [Discussion](#discussion)
@@ -190,8 +190,7 @@ The Copernicus Emergency Management Service (CEMS) Wildfire dataset spans from J
 
 #### CEMS Dataset
 
-The **Copernicus Emergency Management Service (CEMS) Wildfire dataset**
-is the primary training source. It is authoritative, expert-labeled, and covers European fire events on the same Sentinel-2 sensor used for operational inference.
+The **Copernicus Emergency Management Service (CEMS) Wildfire dataset** is the primary training source. It is authoritative, expert-labeled, and covers European fire events on the same Sentinel-2 sensor used for operational inference.
 
 **Source:** Copernicus Emergency Management Service, distributed via HuggingFace (links-ads/wildfires-cems).
 
@@ -206,13 +205,13 @@ is the primary training source. It is authoritative, expert-labeled, and covers 
 
 -   12 Sentinel-2 L2A bands at 10--20 m spatial resolution.
 -   7 bands selected for training: B02 (Blue), B03 (Green), B04 (Red), B08 (NIR), B8A (NIR-narrow), B11 (SWIR1), B12 (SWIR2).
--   NDVI computed and appended as 8th channel.
+-   NDVI computed and appended as 8th channel. This one provides with a vegetation information that it is very useful for our proposal.
 
 **Label types:**
 
 -   **DEL (Delineation):** Binary mask 0 = not burned, 1 = burned. Used for Phase 1 (binary fire detection).
 
--   **GRA (Grading):** 5-class severity mask 0 = no damage, 1 = negligible, 2 = moderate, 3 = high, 4 = destroyed. Used for Phase 2 (severity assessment). Not all activations include GRA; availability is flagged in satelliteData.csv.
+-   **GRA (Grading):** 5-class severity mask 0 = no damage, 1 = negligible, 2 = moderate, 3 = high, 4 = destroyed. Used for Phase 2 (severity assessment). 
 
 -   **CM (Cloud Mask):** 4-class cloud mask generated with CloudSen12 0 = clear, 1 = clouds, 2 = light clouds, 3 = shadow.
 
@@ -241,10 +240,8 @@ Labels were produced by human experts at CEMS: analysts compared pre-fire and po
 
 #### Sen2Fire Dataset
 
-The **Sen2Fire dataset** provides geographic diversity by covering
-Australian bushfires, complementing the European-focused CEMS data.
+The **Sen2Fire dataset** provides geographic diversity by covering Australian bushfires, complementing the European-focused CEMS data.
 
-**Source:** Zenodo record 10881058; paper: arXiv:2403.17884.
 
 **Coverage:**
 
@@ -264,7 +261,7 @@ Australian bushfires, complementing the European-focused CEMS data.
 
 -   Binary fire mask only (0/1), derived from MODIS MOD14A1 V6.1
 
--   **No severity (GRA) labels** --- only binary fire/no-fire available
+-   **No severity (GRA) labels**. In this dataset, we only have binary information, fire/no-fire.
 
 **Cloud handling:**
 
@@ -272,9 +269,8 @@ Australian bushfires, complementing the European-focused CEMS data.
 
 -   Rule-based cloud scoring using B02/B03 brightness and optional B10 (water vapour) heuristics
 
--   By default, s2cloudless model is applied; patches with cloud fraction \> 30% are excluded
+-   By default, "s2cloudless" model is applied; patches with cloud fraction \> 30% are excluded
 
--   Fallback: rule-based cloud_score_sen2fire_12band() in cloud_detection.py when s2cloudless is not installed
 
 **Storage:** approximately 6 GB.
 
@@ -363,336 +359,11 @@ Splits are done at the **activation level** (not patch level) to prevent data le
 
 Four families of models were developed and compared: SMP pretrained encoder-decoder models (primary), U-Net from scratch (secondary), CNN from scratch (secondary), and YOLOv8-Seg (secondary). All models receive 8-channel input (7 Sentinel-2 bands + NDVI) and are trained on combined CEMS + Sen2Fire data.
 
-Primary metric for model selection: Fire IoU (Intersection over Union on the fire class). Secondary metrics: Fire Dice, Fire Recall, Mean IoU, and Detection F1.
+We selected a primary metric for each model deppending of the task that it will tackle and some secundary metrics as Fire Dice, Fire Recall, Mean IoU, and Detection F1.
 
-Loss function: combined Binary Cross Entropy + Dice loss (total = 0.5 × BCE + 0.5 × Dice).
+The loss function used is a combination of Binary Cross Entropy + Dice loss (total = 0.5 × BCE + 0.5 × Dice).
 
-Experiment tracking: Weights & Biases (fire-detection project). A total of 59 training runs (46 finished) were tracked.
-
-### SMP Models with Pretrained Encoders
-
-#### Overview
-
-The Segmentation Models PyTorch (SMP) framework provides a high-level API for building encoder-decoder segmentation networks with pretrained backbones. It supports 12 architectures (U-Net, U-Net++, DeepLabV3+, and others) and over 800 pretrained encoders from the ImageNet benchmark. Using pretrained encoders provides the model with spectral and spatial features learned from millions of natural images, which transfer effectively to satellite imagery via fine-tuning.
-
-**Architectures tested:**
-
-| Encoder        | Decoder    | Role                                        |
-  |----------------|------------|---------------------------------------------|
-  | ResNet50       | U-Net++    | Best accuracy (primary recommendation)      |                                                                                                         
-  | ResNet50       | DeepLabV3+ | Large-fire context via atrous convolutions  |                                                                                                         
-  | ResNet34       | U-Net      | Balanced baseline                           |                                                                                                         
-  | ResNet18       | U-Net      | Fast, lightweight                           |                                                                                                         
-  | EfficientNet-B2| U-Net++    | Best quality in EfficientNet family         |                                                                                                         
-  | MobileNetV2    | U-Net      | Edge deployment                             |
-
-
-All models use 8 input channels (standard ImageNet first conv layer is adapted from 3 to 8 channels) and a two-phase training strategy.
-
-### ResNet50 + U-Net++ Architecture (Primary)
-
-The ResNet50 + U-Net++ combination is the primary recommended model. It combines the powerful feature extraction of a deep residual network with the fine-grained boundary localization of the nested U-Net decoder.
-
-**Encoder --- ResNet50:**
-
-ResNet50 is a 50-layer convolutional network using bottleneck residual blocks. It progressively downsamples the input while extracting increasingly abstract features:
-
-Input 256×256×8\
-→ Conv 7×7 (stride 2) → 128×128×64\
-→ MaxPool (stride 2) → 64×64×64\
-→ Layer 1 (3 blocks) → 64×64×256\
-→ Layer 2 (4 blocks) → 32×32×512\
-→ Layer 3 (6 blocks) → 16×16×1024\
-→ Layer 4 (3 blocks) → 8×8×2048 (bottleneck)
-
-The bottleneck design pushes feature maps up to 2048 channels. This wide representation encodes progressively more abstract combinations of spectral bands. In Sentinel-2 imagery, the distinction between an active fire pixel, a highly reflective urban surface, and sun glint over water is subtle in RGB but separable in the full spectral space. ResNet50\'s deeper representations learn those discriminative patterns more reliably than shallower alternatives.
-
-The first convolutional layer is adapted from 3 input channels (ImageNet standard) to 8 input channels, preserving pretrained weights for the first 3 channels and randomly  initializing the additional 5.
-
-**Decoder --- U-Net++:**
-
-U-Net++ replaces the direct skip connections of standard U-Net with a dense nested structure of intermediate nodes. Each decoder node receives: (1) the upsampled output from below, (2) the encoder feature map at the same resolution, and (3) all sibling outputs at the same decoder depth. This dense connectivity reduces the semantic gap between encoder and decoder features, improving boundary precision particularly important for detecting small fire hotspots and precise burn perimeters.
-
-U-Net++: Nested dense skip connections\
-X(i,j) = H(concat(X(i,k) for k\<j, upsample(X(i+1,j-1))))
-
-The decoder adds approximately 24M parameters on top of the 25M encoder, giving a total of approximately **49M parameters** for the full dual-head model.
-
-**Output --- dual head:**
-
-After Phase 2 training, the model has two output heads sharing the encoder and decoder:
-
-Decoder output\
-├── Binary head (1×1 conv, 2 classes) → fire / no-fire map (256×256)\
-└── Severity head (1×1 conv, 5 classes) → damage level map (256×256)
-
-![](images/image8.png)
-
-*ResNet50 + U-Net++ architecture*
-
-![](images/image9.png)
-
-*ResNet50 + U-Net++ decoder detail*
-
-### Two-Phase Training Pipeline
-
-The training follows a two-phase strategy designed to maximize the use of available labeled data and minimize interference between the binary and severity tasks.
-
-#### Phase 1 --- Binary Fire Detection
-
-**Hypothesis:**
-
-Combining CEMS DEL (European fires, expert labeled) with Sen2Fire (Australian fires, binary labels) will produce a more generalizable binary fire detection model than training on either dataset alone. The geographic diversity forces the model to learn spectral fire signatures that generalize across different vegetation types, fire regimes, and atmospheric conditions.
-
-**Experiment Configuration:**
-
-| Parameter      | Value                                                  |
-  |----------------|--------------------------------------------------------|
-  | Data           | CEMS DEL patches + Sen2Fire (combined with `ConcatDataset`) |                                                                                                      
-  | Input          | 256×256×8 (7 bands + NDVI)                             |                                                                                                           
-  | Model          | Single-head binary (encoder + decoder + binary head, 2 classes) |                                                                                                  
-  | Loss           | 0.5 × BCE + 0.5 × Dice                                 |                                                                                                           
-  | Optimizer      | AdamW                                                  |                                                                                                           
-  | Learning rate  | 2.5e-5                                                 |
-  | Batch size     | 16                                                     |                                                                                                           
-  | Max epochs     | 50 (with early stopping)                               |                                                                                                           
-  | Primary metric | Validation Fire IoU                                    |
-  | Script         | `train_combined_binary.py`                             | 
-
-
-Command to run the experiments:
-
-```bash
-uv run python train_combined_binary.py
---patches-dir ../patches
---sen2fire-dir ../data-sen2fire
---output-dir ./output/v3_combined_binary_resnet50_unetpp
---encoder resnet50
---architecture unetplusplus
---epochs 50
-```
-
-**Results:**
-
-| Architecture                | Fire IoU     | Det F1 | Fire Recall | Epochs to best |
-  |-----------------------------|--------------|--------|-------------|----------------|
-  | resnet50_unetplusplus       | **0.7791**   | 0.8455 | 0.9286      | 27             |                                                                                                
-  | resnet50_deeplabv3plus      | 0.7724       | 0.8587 | 0.9181      | ---            |                                                                                                
-  | resnet18_unet               | 0.7654       | 0.8351 | 0.9218      | ---            |                                                                                                
-  | resnet34_unet               | 0.7650       | 0.8524 | 0.9286      | 17             |                                                                                                
-  | efficientnet-b2_unetplusplus| 0.7612       | 0.8711 | 0.9356      | ---            |
-  | mobilenet_v2_unet           | 0.7572       | 0.8612 | 0.9141      | ---            |   
-
-Training time for ResNet50 + U-Net++: approximately 30 minutes on a single NVIDIA L4 GPU.
-
-![](images/image10.png)
-
-*W&B metrics dashboard --- IoU, Dice and loss tracking*
-
-![](images/image11.png)
-
-*W&B hyperparameter comparison view*
-
-![](images/image12.png)
-
-*Loss and fire IoU evolution over epochs*
-
-#### Conclusions
-
-The hypothesis is confirmed. ResNet50 + U-Net++ achieves the highest Fire IoU (0.779), placing our results in the upper range of published Sentinel-2 fire segmentation benchmarks (typically 0.65--0.90). The combined CEMS + Sen2Fire training provides geographic diversity that improves generalization. High Fire Recall (0.93) is particularly important operationally --- missing a fire is worse than a false alarm. The pretrained ResNet50 encoder provides robust feature representations that transfer effectively from ImageNet to 8-channel satellite imagery.
-
-#### Phase 2 --- Severity Fine-Tuning
-
-**Hypothesis:**
-
-After Phase 1 has trained a robust binary fire detection model, freezing the encoder and binary head and training only a new severity head on CEMS GRA data will add 5-class severity assessment without degrading binary detection performance. This approach leverages the fact that severity labels only exist in CEMS, while binary labels exist in both CEMS and Sen2Fire.
-
-**Experiment Configuration:**
-
-| Parameter     | Value                                                          |
-  |---------------|----------------------------------------------------------------|
-  | Data          | CEMS GRA patches only (5 severity classes)                     |                                                                                                    
-  | Input         | 256×256×8 (same as Phase 1)                                    |
-  | Model         | `FireDualHeadModel`: encoder + decoder + binary head (frozen) + severity head (new, trained) |                                                                      
-  | Loss          | CrossEntropy (weighted for class imbalance) on severity head   |
-  | Learning rate | 5e-4                                                           |                                                                                                    
-  | Batch size    | 16                                                             |                                                                                                    
-  | Max epochs    | 30                                                             |                                                                                                    
-  | Frozen        | Encoder, decoder, binary head                                  |                                                                                                    
-  | Trained       | Severity head only (1×1 Conv2d, 5 classes)                     |                                                                                                    
-  | Script        | `train_severity_finetune.py`                                   |   
-
-The command to execute the experiment is:
-
-```bash
-uv run python train_severity_finetune.py
---checkpoint ./output/v3_combined_binary_resnet50_unetpp/checkpoints/best_model.pt
---patches-dir ../patches_gra
---output-dir ./output/v3_finetune_severity_resnet50_unetpp
---epochs 30
-```
-
-**Results:**
-
-  | Architecture                | Mean IoU     | Fire IoU (severity) | Epochs to best |
-  |-----------------------------|--------------|---------------------|----------------|
-  | resnet50_unetplusplus       | **0.3444**   | **0.4069**          | 15             |                                                                                                 
-  | efficientnet-b2_unetplusplus| 0.3388       | 0.3863              | ---            |                                                                                                 
-  | resnet34_unet               | 0.3352       | 0.3715              | ---            |                                                                                                 
-  | resnet50_deeplabv3plus      | 0.3329       | 0.3092              | ---            |                                                                                                 
-  | mobilenet_v2_unet           | 0.3317       | 0.3638              | ---            |
-  | resnet18_unet               | 0.3240       | 0.3641              | ---            |  
-
-Training time: approximately 10--20 minutes per model.
-
-![](images/image13.png)
-
-*ResNet34 U-Net++ vs U-Net baseline comparison*
-
-#### Conclusions
-
-The two-phase approach works as designed. Binary fire detection performance is preserved from Phase 1 the frozen encoder and binary head continue to produce accurate fire maps. The severity head learns a meaningful 5-class severity map with Mean IoU 0.34 and Fire IoU (severity) 0.41. These values are in line with expectations for 5-class remote sensing segmentation: the \"no damage\" class dominates the scene, class boundaries are fine-grained, and expert annotations can disagree at severity boundaries. The dual-head design produces a single model that outputs both binary fire maps and severity maps in one forward pass, enabling efficient inference in the application.
-
-A notable finding from W&B GPU monitoring: the DeepLabV3+ severity fine-tuning run showed GPU utilization as low as 300--500 MHz SM clock (compared to 1500--2000 MHz for U-Net variants), indicating a data pipeline bottleneck rather than a compute bottleneck. This explains its comparatively lower severity performance.
-
-#### Compute Resources
-
-| Phase     | Model            | GPU Memory   | Training Time        | Checkpoint Size |
-  |-----------|------------------|--------------|----------------------|-----------------|
-  | Phase 1   | ResNet34 + U-Net | ~6–8 GB      | ~15 min (17 epochs)  | 94 MB           |                                                                                              
-  | Phase 1   | ResNet50 + U-Net++| ~10–12 GB   | ~30 min (27 epochs)  | 188 MB          |                                                                                              
-  | Phase 2   | Either           | ~6–12 GB     | ~10–20 min           | ---             |                                                                                              
-  | Inference | ResNet34 + U-Net | ~2 GB        | ~10–20 ms/patch      | ---             |                                                                                              
-  | Inference | ResNet50 + U-Net++| ~4 GB       | ~20–40 ms/patch      | ---             | 
-
-**Compute infrastructure:** Google Cloud Platform, instance g2-standard-4 (4 vCPUs, 16 GB RAM), NVIDIA L4 GPU, 500 GB disk, Debian 11.
-
-![](images/image10.png)
-
-*W&B metrics dashboard --- IoU, Dice and loss tracking*
-
-![](images/image11.png)
-
-*W&B hyperparameter comparison view*
-
-![](images/image12.png)
-
-*Loss and fire IoU evolution over epochs*
-
-### U-Net from Scratch
-
-#### Architecture
-
-The U-Net from scratch is a compact segmentation model built with no pretrained weights. It is designed to establish a strong baseline for binary fire segmentation while minimizing parameter count.
-
-**Block:** Two sequential Conv3×3 → BatchNorm → ReLU layers (standard U-Net block).
-
-**Encoder (contracting path):**
-
--   Block 1: 8 → 16 channels, MaxPool → 128×128
-
--   Block 2: 16 → 32 channels, MaxPool → 64×64
-
--   Block 3 (bottleneck): 32 → 64 channels
-
-**Decoder (expanding path):**
-
--   Stage 1: ConvTranspose2d (64 → 32) → concat skip from Block 2 → Conv block → 128×128×32
-
--   Stage 2: ConvTranspose2d (32 → 16) → concat skip from Block 1 → Conv block → 256×256×16
-
-**Output head:** 1×1 Conv (16 → 2 classes).
-
-**Total parameters: \~118,000** (approximately 415× fewer than ResNet50 + U-Net++).
-
-Skip connections carry high-resolution spatial features from encoder to decoder, preserving precise burn boundary information that would otherwise be lost during downsampling. The architecture intentionally mirrors the SMP U-Net structure but starts from random weights, making it a controlled comparison for the value of ImageNet pretraining.
-
-![](images/image14.png)
-
-*Generic U-Net architecture for fire detection*
-
-![](images/image15.png)
-
-*U-Net scratch architecture used in experiments*
-
-#### Hyperparameter Tuning
-
-Hyperparameter search was performed using Ray Tune with a three-phase
-flow:
-
-1.  **Search phase:** N trials with random hyperparameter configurations     from the search space; no W&B logging.
-
-2.  **Selection phase:** All trials ranked by the primary metric (Fire IoU); top-K configurations selected.
-
-3.  **Re-training phase:** Each of the K best configurations re-trained in full with W&B and CSV logging.
-
-This approach avoids flooding W&B with noise from exploratory runs and ensures only meaningful results are logged.
-
-**Hyperparameter search space:**
-
-| Hyperparameter   | Search Space                  | Description                            |
-  |------------------|-------------------------------|----------------------------------------|
-  | `learning_rate`  | loguniform(5e-5, 5e-4)        | Initial learning rate                  |                                                                                         
-  | `weight_decay`   | loguniform(1e-6, 1e-3)        | L2 regularization                      |                                                                                         
-  | `batch_size`     | choice([8, 16, 32])           | Batch size (affects BatchNorm statistics) | 
-
-**Configuration:** 4 tuning trials (tune-samples), top 3 re-trained (tune-top-k), 50 epochs maximum, early stopping on validation Fire IoU, CEMS + Sen2Fire combined training.
-
-```bash
-uv run python train.py
---patches-dir ../patches
---sen2fire-dir ../data-sen2fire
---output-dir ./output/unet_scratch
---tune true
---tune-target unet_scratch
---tune-samples 4
---tune-top-k 3
---epochs 50
---wandb
---project fire-detection
---results-csv ./training_results.csv
---device auto
-```
-
-#### Hypothesis
-
-A compact U-Net with no pretrained encoder, tuned by Ray Tune, can achieve competitive binary fire segmentation on combined CEMS + Sen2Fire data. Without pretrained weights, the model must learn all spectral-to-feature mappings from fire data only, but its architectural bias (skip connections, encoder-decoder structure) should still enable good Fire IoU given sufficient training data and appropriate hyperparameters.
-
-#### Experiment Configuration
-
-| Parameter      | Value                                                     |
-  |----------------|-----------------------------------------------------------|
-  | Data           | CEMS DEL + Sen2Fire (combined)                            |                                                                                                        
-  | Input          | 256×256×8 (7 bands + NDVI)                                |
-  | Architecture   | Custom U-Net, ~118K params, no pretrained weights         |                                                                                                        
-  | Loss           | 0.5 × BCE + 0.5 × Dice                                    |
-  | Optimizer      | AdamW                                                     |                                                                                                        
-  | Max epochs     | 50 (early stopping)                                       |
-  | Primary metric | Fire IoU                                                  |                                                                                                        
-  | Tuning         | Ray Tune, 4 trials, top-3 re-trained                      |
-  | Mask type      | Binary DEL                                                |    
-
-#### Results
-
-| Run  | Fire IoU     | Fire Dice    | Mean IoU     | Best Epoch | LR       | WD       | Batch |
-  |------|--------------|--------------|--------------|------------|----------|----------|-------|
-  | top3 | **0.7453**   | **0.8541**   | **0.8527**   | 10         | 1.2e-04  | 2.2e-05  | 32    |                                                                                      
-  | top1 | 0.7430       | 0.8526       | 0.8518       | 6          | 1.8e-04  | 9.7e-05  | 32    |                                                                                      
-  | top2 | 0.7188       | 0.8364       | 0.8362       | 3          | 2.8e-04  | 3.0e-05  | 32    |  
-
-Best result: **Fire IoU 0.745, Fire Dice 0.854, Mean IoU 0.853**.
-
-![](images/image16.png)
-
-*Training metrics --- scratch architectures and hyperparameter tuning*
-
-![](images/image17.png)
-
-*Training metrics --- fire IoU across runs*
-
-#### Conclusions
-
-The hypothesis is confirmed and the results are remarkably strong. A 118K-parameter model with no pretrained weights achieves Fire IoU 0.745 only 0.034 below the 49M-parameter ResNet50 + U-Net++ (0.779). This demonstrates that the U-Net architectural inductive bias (skip connections, encoder-decoder structure) is highly effective for satellite fire segmentation even without transfer learning. The combination of CEMS + Sen2Fire provides enough fire examples for the model to learn robust spectral patterns from scratch. The high Mean IoU (0.853) indicates good performance on the background class as well, confirming the model does not collapse to always predicting non-fire. This model is an excellent choice when model size matters for edge deployment, embedded inference, or resource-constrained environments.
+We have some experiment trackings in Weights & Biases (fire-detection project). A total of 59 training runs (46 finished) were tracked.
 
 ### CNN from Scratch
 
@@ -761,6 +432,7 @@ Training time: approximately 2,441--2,599 seconds per run (~40 minutes).
 #### Conclusions
 
 The CNN classifier achieves moderate patch-level classification performance (F1 0.60). The high AUC (0.94) indicates the model has learned a meaningful ranking of fire probability even if the binary threshold produces imprecise F1. However, the low precision (0.36) indicates many false positives: patches are flagged as fire-containing even when the actual fire pixels occupy only a small fraction of the patch. This is a known limitation of patch-level classification a single fire pixel in a 256×256 patch generates a positive label, forcing the model to respond to very weak signals. For operational use, pixel-wise segmentation is clearly superior. The CNN Scratch is included as a baseline to understand the difficulty of the classification task.
+
 
 ### YOLO
 
@@ -831,6 +503,310 @@ YOLO achieves the weakest results (mAP50-95 0.44) of all models evaluated. The m
 
 Beyond the domain gap, the detection-style task formulation is a poor fit for burned area mapping. Burned areas are large, spatially diffuse regions that span most of a tile --- not discrete objects with clear bounding boxes. YOLO\'s detection head is designed for locating individual objects, so it struggles with fire perimeters that are irregular and occupy the majority of the scene. Pixel-wise segmentation models are fundamentally better suited to this problem.
 
+
+
+### U-Net from Scratch
+
+#### Architecture
+
+The U-Net from scratch is a compact segmentation model built with no pretrained weights. It is designed to establish a strong baseline for binary fire segmentation while minimizing parameter count.
+
+**Block:** Two sequential Conv3×3 → BatchNorm → ReLU layers (standard U-Net block).
+
+**Encoder (contracting path):**
+
+-   Block 1: 8 → 16 channels, MaxPool → 128×128
+
+-   Block 2: 16 → 32 channels, MaxPool → 64×64
+
+-   Block 3 (bottleneck): 32 → 64 channels
+
+**Decoder (expanding path):**
+
+-   Stage 1: ConvTranspose2d (64 → 32) → concat skip from Block 2 → Conv block → 128×128×32
+
+-   Stage 2: ConvTranspose2d (32 → 16) → concat skip from Block 1 → Conv block → 256×256×16
+
+**Output head:** 1×1 Conv (16 → 2 classes).
+
+**Total parameters: \~118,000** (approximately 415× fewer than ResNet50 + U-Net++).
+
+Skip connections carry high-resolution spatial features from encoder to decoder, preserving precise burn boundary information that would otherwise be lost during downsampling. The architecture intentionally mirrors the SMP U-Net structure but starts from random weights, making it a controlled comparison for the value of ImageNet pretraining.
+
+![](images/image14.png)
+
+*Generic U-Net architecture for fire detection*
+
+![](images/image15.png)
+
+*U-Net scratch architecture used in experiments*
+
+#### Hyperparameter Tuning
+
+Hyperparameter search was performed using Ray Tune with a three-phase
+flow:
+
+1.  **Search phase:** 12 trials with random hyperparameter configurations from the search space. This ones are no logged in W&B to avoid some noise.
+
+2.  **Selection phase:** All trials ranked by the primary metric (Fire IoU); top-3 configurations selected.
+
+3.  **Re-training phase:** Each of the 3 best configurations re-trained in full with W&B and CSV logging.
+
+This approach avoids flooding W&B with noise from exploratory runs and ensures only meaningful results are logged.
+
+**Hyperparameter search space:**
+
+| Hyperparameter   | Search Space                  | Description                            |
+  |------------------|-------------------------------|----------------------------------------|
+  | `learning_rate`  | loguniform(5e-5, 5e-4)        | Initial learning rate                  |                                                                                         
+  | `weight_decay`   | loguniform(1e-6, 1e-3)        | L2 regularization                      |                                                                                         
+  | `batch_size`     | choice([8, 16, 32])           | Batch size (affects BatchNorm statistics) | 
+
+**Configuration:** 4 tuning trials (tune-samples), top 3 re-trained (tune-top-k), 50 epochs maximum, early stopping on validation Fire IoU, CEMS + Sen2Fire combined training.
+
+```bash
+uv run python train.py
+--patches-dir ../patches
+--sen2fire-dir ../data-sen2fire
+--output-dir ./output/unet_scratch
+--tune true
+--tune-target unet_scratch
+--tune-samples 4
+--tune-top-k 3
+--epochs 50
+--wandb
+--project fire-detection
+--results-csv ./training_results.csv
+--device auto
+```
+
+#### Hypothesis
+
+A compact U-Net with no pretrained encoder, tuned by Ray Tune, can achieve competitive binary fire segmentation on combined CEMS + Sen2Fire data. Without pretrained weights, the model must learn all spectral-to-feature mappings from fire data only, but its architectural bias (skip connections, encoder-decoder structure) should still enable good Fire IoU given sufficient training data and appropriate hyperparameters.
+
+#### Experiment Configuration
+
+| Parameter      | Value                                                     |
+  |----------------|-----------------------------------------------------------|
+  | Data           | CEMS DEL + Sen2Fire (combined)                            |                                                                                                        
+  | Input          | 256×256×8 (7 bands + NDVI)                                |
+  | Architecture   | Custom U-Net, ~118K params, no pretrained weights         |                                                                                                        
+  | Loss           | 0.5 × BCE + 0.5 × Dice                                    |
+  | Optimizer      | AdamW                                                     |                                                                                                        
+  | Max epochs     | 50 (early stopping)                                       |
+  | Primary metric | Fire IoU                                                  |                                                                                                        
+  | Tuning         | Ray Tune, 4 trials, top-3 re-trained                      |
+  | Mask type      | Binary DEL                                                |    
+
+#### Results
+
+| Run  | Fire IoU     | Fire Dice    | Mean IoU     | Best Epoch | LR       | WD       | Batch |
+  |------|--------------|--------------|--------------|------------|----------|----------|-------|
+  | top3 | **0.7453**   | **0.8541**   | **0.8527**   | 10         | 1.2e-04  | 2.2e-05  | 32    |                                                                                      
+  | top1 | 0.7430       | 0.8526       | 0.8518       | 6          | 1.8e-04  | 9.7e-05  | 32    |                                                                                      
+  | top2 | 0.7188       | 0.8364       | 0.8362       | 3          | 2.8e-04  | 3.0e-05  | 32    |  
+
+Best result: **Fire IoU 0.745, Fire Dice 0.854, Mean IoU 0.853**.
+
+#### Conclusions
+
+The hypothesis is confirmed and the results are remarkably strong. A 118K-parameter model with no pretrained weights achieves Fire IoU 0.745 only 0.034 below the 49M-parameter ResNet50 + U-Net++ (0.779). This demonstrates that the U-Net architectural inductive bias (skip connections, encoder-decoder structure) is highly effective for satellite fire segmentation even without transfer learning. The combination of CEMS + Sen2Fire provides enough fire examples for the model to learn robust spectral patterns from scratch. The high Mean IoU (0.853) indicates good performance on the background class as well, confirming the model does not collapse to always predicting non-fire. This model is an excellent choice when model size matters for edge deployment, embedded inference, or resource-constrained environments.
+
+
+### SMP Models with Pretrained Encoders
+
+#### Overview
+
+The Segmentation Models PyTorch (SMP) framework provides a high-level API for building encoder-decoder segmentation networks with pretrained backbones. It supports 12 architectures (U-Net, U-Net++, DeepLabV3+, and others) and over 800 pretrained encoders from the ImageNet benchmark. Using pretrained encoders provides the model with spectral and spatial features learned from millions of natural images, which transfer effectively to satellite imagery via fine-tuning.
+
+**Architectures tested:**
+
+| Encoder        | Decoder    | Role                                        |
+  |----------------|------------|---------------------------------------------|
+  | ResNet50       | U-Net++    | Best Fire IoU (primary recommendation)      |                                                                                                         
+  | ResNet50       | DeepLabV3+ | Large-fire context via atrous convolutions  |                                                                                                         
+  | ResNet34       | U-Net      | Balanced baseline                           |                                                                                                         
+  | ResNet18       | U-Net      | Fast, lightweight                           |                                                                                                         
+  | EfficientNet-B2| U-Net++    | Best quality in EfficientNet family         |                                                                                                         
+  | MobileNetV2    | U-Net      | Edge deployment                             |
+
+
+All models use 8 input channels (standard ImageNet first conv layer is adapted from 3 to 8 channels) and a two-phase training strategy.
+
+### ResNet50 + U-Net++ Architecture (Primary)
+
+The ResNet50 + U-Net++ combination is the primary recommended model. It combines the powerful feature extraction of a deep residual network with the fine-grained boundary localization of the nested U-Net decoder.
+
+**Encoder --- ResNet50:**
+
+ResNet50 is a 50-layer convolutional network using bottleneck residual blocks. It progressively downsamples the input while extracting increasingly abstract features:
+
+Input 256×256×8\
+→ Conv 7×7 (stride 2) → 128×128×64\
+→ MaxPool (stride 2) → 64×64×64\
+→ Layer 1 (3 blocks) → 64×64×256\
+→ Layer 2 (4 blocks) → 32×32×512\
+→ Layer 3 (6 blocks) → 16×16×1024\
+→ Layer 4 (3 blocks) → 8×8×2048 (bottleneck)
+
+The bottleneck design pushes feature maps up to 2048 channels. This wide representation encodes progressively more abstract combinations of spectral bands. In Sentinel-2 imagery, the distinction between an active fire pixel, a highly reflective urban surface, and sun glint over water is subtle in RGB but separable in the full spectral space. ResNet50\'s deeper representations learn those discriminative patterns more reliably than shallower alternatives.
+
+The first convolutional layer is adapted from 3 input channels (ImageNet standard) to 8 input channels, preserving pretrained weights for the first 3 channels and randomly  initializing the additional 5.
+
+**Decoder --- U-Net++:**
+
+U-Net++ replaces the direct skip connections of standard U-Net with a dense nested structure of intermediate nodes. Each decoder node receives: (1) the upsampled output from below, (2) the encoder feature map at the same resolution, and (3) all sibling outputs at the same decoder depth. This dense connectivity reduces the semantic gap between encoder and decoder features, improving boundary precision particularly important for detecting small fire hotspots and precise burn perimeters.
+
+U-Net++: Nested dense skip connections\
+X(i,j) = H(concat(X(i,k) for k\<j, upsample(X(i+1,j-1))))
+
+The decoder adds approximately 24M parameters on top of the 25M encoder, giving a total of approximately **49M parameters** for the full dual-head model.
+
+**Output --- dual head:**
+
+After Phase 2 training, the model has two output heads sharing the encoder and decoder:
+
+Decoder output\
+├── Binary head (1×1 conv, 2 classes) → fire / no-fire map (256×256)\
+└── Severity head (1×1 conv, 5 classes) → damage level map (256×256)
+
+![](images/image8.png)
+
+*ResNet50 + U-Net++ architecture*
+
+![](images/image9.png)
+
+*ResNet50 + U-Net++ decoder detail*
+
+### Two-Phase Training Pipeline
+
+The training follows a two-phase strategy designed to maximize the use of available labeled data and minimize interference between the binary and severity tasks.
+
+#### Phase 1 - Binary Fire Detection
+
+**Hypothesis:**
+
+Combining CEMS DEL (European fires, expert labeled) with Sen2Fire (Australian fires, binary labels) will produce a more generalizable binary fire detection model than training on either dataset alone. The geographic diversity forces the model to learn spectral fire signatures that generalize across different vegetation types, fire regimes, and atmospheric conditions.
+
+**Experiment Configuration:**
+
+| Parameter      | Value                                                  |
+  |----------------|--------------------------------------------------------|
+  | Data           | CEMS DEL patches + Sen2Fire (combined with `ConcatDataset`) |                                                                                                      
+  | Input          | 256×256×8 (7 bands + NDVI)                             |                                                                                                           
+  | Model          | Single-head binary (encoder + decoder + binary head, 2 classes) |                                                                                                  
+  | Loss           | 0.5 × BCE + 0.5 × Dice                                 |                                                                                                           
+  | Optimizer      | AdamW                                                  |                                                                                                           
+  | Learning rate  | 2.5e-5                                                 |
+  | Batch size     | 16                                                     |                                                                                                           
+  | Max epochs     | 50 (with early stopping)                               |                                                                                                           
+  | Primary metric | Validation Fire IoU                                    |
+  | Script         | `train_combined_binary.py`                             | 
+
+
+Command to run the experiments:
+
+```bash
+uv run python train_combined_binary.py
+--patches-dir ../patches
+--sen2fire-dir ../data-sen2fire
+--output-dir ./output/v3_combined_binary_resnet50_unetpp
+--encoder resnet50
+--architecture unetplusplus
+--epochs 50
+```
+
+**Results:**
+
+| Architecture                | Fire IoU     | Det F1 | Fire Recall | Epochs to best |
+  |-----------------------------|--------------|--------|-------------|----------------|
+  | resnet50_unetplusplus       | **0.7791**   | 0.8455 | 0.9286      | 27             |                                                                                                
+  | resnet50_deeplabv3plus      | 0.7724       | 0.8587 | 0.9181      | ---            |                                                                                                
+  | resnet18_unet               | 0.7654       | 0.8351 | 0.9218      | ---            |                                                                                                
+  | resnet34_unet               | 0.7650       | 0.8524 | 0.9286      | 17             |                                                                                                
+  | efficientnet-b2_unetplusplus| 0.7612       | 0.8711 | 0.9356      | ---            |
+  | mobilenet_v2_unet           | 0.7572       | 0.8612 | 0.9141      | ---            |   
+
+Training time for ResNet50 + U-Net++: approximately 30 minutes on a single NVIDIA L4 GPU.
+
+![](images/image11.png)
+
+*W&B results of ResNet50 + U-Net++*
+
+
+
+
+
+#### Conclusions
+
+The hypothesis is confirmed. ResNet50 + U-Net++ achieves the highest Fire IoU (0.779), placing our results in the upper range of published Sentinel-2 fire segmentation benchmarks (typically 0.65-0.90). The combined CEMS + Sen2Fire training provides geographic diversity that improves generalization. High Fire Recall (0.93) is particularly important operationally missing a fire is worse than a false alarm. The pretrained ResNet50 encoder provides robust feature representations that transfer effectively from ImageNet to 8-channel satellite imagery.
+
+#### Phase 2 - Severity Fine-Tuning
+
+**Hypothesis:**
+
+After Phase 1 has trained a robust binary fire detection model, freezing the encoder and binary head and training only a new severity head on CEMS GRA data will add 5-class severity assessment without degrading binary detection performance. This approach leverages the fact that severity labels only exist in CEMS, while binary labels exist in both CEMS and Sen2Fire.
+
+**Experiment Configuration:**
+
+| Parameter     | Value                                                          |
+  |---------------|----------------------------------------------------------------|
+  | Data          | CEMS GRA patches only (5 severity classes)                     |                                                                                                    
+  | Input         | 256×256×8 (same as Phase 1)                                    |
+  | Model         | `FireDualHeadModel`: encoder + decoder + binary head (frozen) + severity head (new, trained) |                                                                      
+  | Loss          | CrossEntropy (weighted for class imbalance) on severity head   |
+  | Learning rate | 5e-4                                                           |                                                                                                    
+  | Batch size    | 16                                                             |                                                                                                    
+  | Max epochs    | 30                                                             |                                                                                                    
+  | Frozen        | Encoder, decoder, binary head                                  |                                                                                                    
+  | Trained       | Severity head only (1×1 Conv2d, 5 classes)                     |                                                                                                    
+  | Script        | `train_severity_finetune.py`                                   |   
+
+The command to execute the experiment is:
+
+```bash
+uv run python train_severity_finetune.py
+--checkpoint ./output/v3_combined_binary_resnet50_unetpp/checkpoints/best_model.pt
+--patches-dir ../patches_gra
+--output-dir ./output/v3_finetune_severity_resnet50_unetpp
+--epochs 30
+```
+
+**Results:**
+
+  | Architecture                | Mean IoU     | Fire IoU (severity) | Epochs to best |
+  |-----------------------------|--------------|---------------------|----------------|
+  | resnet50_unetplusplus       | **0.3444**   | **0.4069**          | 15             |                                                                                                 
+  | efficientnet-b2_unetplusplus| 0.3388       | 0.3863              | ---            |                                                                                                 
+  | resnet34_unet               | 0.3352       | 0.3715              | ---            |                                                                                                 
+  | resnet50_deeplabv3plus      | 0.3329       | 0.3092              | ---            |                                                                                                 
+  | mobilenet_v2_unet           | 0.3317       | 0.3638              | ---            |
+  | resnet18_unet               | 0.3240       | 0.3641              | ---            |  
+
+Training time: approximately 10--20 minutes per model.
+
+![](images/image13.png)
+
+*ResNet34 U-Net++ vs U-Net baseline comparison*
+
+#### Conclusions
+
+The two-phase approach works as designed. Binary fire detection performance is preserved from Phase 1 the frozen encoder and binary head continue to produce accurate fire maps. The severity head learns a meaningful 5-class severity map with Mean IoU 0.34 and Fire IoU (severity) 0.41. These values are in line with expectations for 5-class remote sensing segmentation: the \"no damage\" class dominates the scene, class boundaries are fine-grained, and expert annotations can disagree at severity boundaries. The dual-head design produces a single model that outputs both binary fire maps and severity maps in one forward pass, enabling efficient inference in the application.
+
+A notable finding from W&B GPU monitoring: the DeepLabV3+ severity fine-tuning run showed GPU utilization as low as 300--500 MHz SM clock (compared to 1500-2000 MHz for U-Net variants), indicating a data pipeline bottleneck rather than a compute bottleneck. This explains its comparatively lower severity performance.
+
+#### Compute Resources
+
+| Phase     | Model            | GPU Memory   | Training Time        | Checkpoint Size |
+  |-----------|------------------|--------------|----------------------|-----------------|
+  | Phase 1   | ResNet34 + U-Net | ~6–8 GB      | ~15 min (17 epochs)  | 94 MB           |                                                                                              
+  | Phase 1   | ResNet50 + U-Net++| ~10–12 GB   | ~30 min (27 epochs)  | 188 MB          |                                                                                              
+  | Phase 2   | Either           | ~6–12 GB     | ~10–20 min           | ---             |                                                                                              
+  | Inference | ResNet34 + U-Net | ~2 GB        | ~10–20 ms/patch      | ---             |                                                                                              
+  | Inference | ResNet50 + U-Net++| ~4 GB       | ~20–40 ms/patch      | ---             | 
+
+**Compute infrastructure:** Google Cloud Platform, instance g2-standard-4 (4 vCPUs, 16 GB RAM), NVIDIA L4 GPU, 500 GB disk, Debian 11.
+
 ### Results Comparison
 
 #### Summary Table
@@ -861,9 +837,9 @@ Pixel-wise segmentation clearly outperforms detection (YOLO mAP50-95 0.44) for b
 
 GPU utilization during training:
 
--   U-Net scratch: most consistent high utilization (50--75%).
+-   U-Net scratch: most consistent high utilization (50-75%).
 
--   ResNet50 + U-Net++: sustained 60--75% GPU utilization.
+-   ResNet50 + U-Net++: sustained 60-75% GPU utilization.
 
 -   YOLO: 60--100W power draw with high variability.
 
@@ -877,11 +853,11 @@ Two models were selected for integration into the fire detection application:
 
 ### ResNet50 + U-Net++ (Primary)
 
-**Fire IoU 0.779** --- best-performing model overall. Selected when accuracy is the priority.
+**Fire IoU 0.779** - best-performing model overall. Selected when Fire IoU is the priority.
 
 -   Dual-head output: binary fire map + 5-level severity map in a single forward pass.
 
--   \~49M parameters, 188 MB checkpoint, \~20--40 ms/patch inference on GPU.
+-   \~49M parameters, 188 MB checkpoint, \~20-40 ms/patch inference on GPU.
 
 -   Requires \~4 GB GPU memory for inference.
 
@@ -899,7 +875,12 @@ Despite operating without any transfer learning, the U-Net from scratch comes re
 
 **CNN Scratch** performs patch-level classification, not pixel-wise segmentation. It cannot produce per-pixel fire masks required for area estimation, perimeter calculation, or map overlays. Its F1 of 0.60 with precision 0.36 also reflects operational unreliability.
 
-**YOLO** was not selected because: (1) mAP50-95 0.44 is the lowest result of all models; (2) the detection-style output (bounding boxes) does not support precise fire perimeter calculations; (3) YOLO\'s pretrained COCO weights provide poor initialization for 8-channel satellite fire data; (4) training was the most computationally expensive (70+ minutes per run); (5) pixel-wise segmentation is fundamentally better suited for burned area mapping.
+**YOLO** was not selected because: 
+  - (1) mAP50-95 0.44 is the lowest result of all models; 
+  - (2) the detection-style output (bounding boxes) does not support precise fire perimeter calculations; 
+  - (3) YOLO\'s pretrained COCO weights provide poor initialization for 8-channel satellite fire data; 
+  - (4) training was the most computationally expensive (70+ minutes per run); 
+  - (5) pixel-wise segmentation is fundamentally better suited for burned area mapping.
 
 # Application
 
@@ -991,7 +972,7 @@ Streamlit frontend (app.py)\
 This project demonstrates that deep learning on multispectral satellite imagery can achieve strong performance for wildfire burned area detection and severity assessment. The key findings are:
 
 **1. Pretrained encoder-decoder models outperform all alternatives.**
-ResNet50 + U-Net++ achieves Fire IoU 0.779 (binary) and Mean IoU 0.344 (severity), placing our results in the upper range of published Sentinel-2 wildfire segmentation benchmarks (0.65--0.90). The two-phase training strategy binary detection on CEMS + Sen2Fire, followed by severity fine-tuning on CEMS GRA only is effective: Phase 1 learns
+ResNet50 + U-Net++ achieves Fire IoU 0.779 (binary) and Mean IoU 0.344 (severity), placing our results in the upper range of published Sentinel-2 wildfire segmentation benchmarks (0.65-0.90). The two-phase training strategy binary detection on CEMS + Sen2Fire, followed by severity fine-tuning on CEMS GRA only is effective: Phase 1 learns
 broad geographic fire detection, and Phase 2 adds severity assessment without degrading binary performance.
 
 **2. A compact U-Net from scratch is surprisingly competitive.** With only \~118K parameters and no pretrained weights, the U-Net scratch model achieves Fire IoU 0.745. The gap to ResNet50 + U-Net++ (0.779) is modest despite a 415× parameter difference. This demonstrates that the U-Net architectural bias is a strong prior for satellite fire
