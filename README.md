@@ -53,10 +53,10 @@
 - [Resource Links](#resource-links)
 # Abstract
 
-This project is based on the motivation to improve detection of wildfires thru selected datasets from satellite imagery and leveraging a number of deep learning models to find out the best fit in terms of precision and performance. It makes a recommendation on which deep learning approaches fit better to wildfire detection and we show how those deep learning models work on fire detection thru an application that scans satellite images across a selected geographical area.
+This project is based on the motivation to improve detection of wildfires through selected datasets from satellite imagery and leveraging a number of deep learning models to find out the best fit in terms of precision and performance. It makes a recommendation on which deep learning approaches fit better to wildfire detection and we show how those deep learning models work on fire detection through an application that scans satellite images across a selected geographical area.
 
 Wildfires have been a major concern because of the change in their behavior, their speed and their destructive capacity. Wildfires have increased fourfold in the number of disastrous events from 1980 to 2023, imposing enormous economic and human costs, particularly in Mediterranean and Temperate Conifer Forest biomes. On the other hand,
-over the last years, a new series of data collected thru Copernicus Emergency Management System (CEMS), from Sentinel-x satellites together with the development of a number of deep learning models on classification and segmentation of images is providing a solid foundation for developing deep learning based architectures and applications that can improve fire detection accuracy.
+over the last years, a new series of data collected through Copernicus Emergency Management System (CEMS), from Sentinel-x satellites together with the development of a number of deep learning models on classification and segmentation of images is providing a solid foundation for developing deep learning based architectures and applications that can improve fire detection accuracy.
 
 Our focus has been on fire detection at the Catalonia geographical area, nevertheless we have relied on datasets from CEMS across the world. Our objective has been to build a deep learning system that detects active wildfires and burned areas from Sentinel-2 satellite imagery, with a focus on the Catalonia region. The system should provide near-real-time detection capabilities, fire area measurement, spread analysis, and automated alerts.
 
@@ -71,7 +71,7 @@ We have developed a small app where we can run those trained models on satellite
 
 Disastrous blazes increased more than fourfold from 1980 to 2023 according to a paper in the journal Science. (Calum X. Cunningham1\*, 2025). Based on that paper, disastrous wildfires occurred globally but were disproportionately concentrated in the Mediterranean and Temperate Conifer Forest biomes, and in populated regions that experience intense fire. Major economic losses caused by wildfire events increased by 4.4 fold from 1980 to 2023, amounting a 28.3 US\$ billion and 0,03% of global GDP. Of the 200 most damaging events, 43% occurred in the last 10 years.
 
-And the impact of the fires in on health should not be overlooked. Based on a paper on how "Wildfire smoke exposure" will increase mortality in USA over next decades (Minghao Qiu, 2025 ), that wildfire smoke would kill an estimated 70,000 Americans each year by 2050.
+And the impact of the fires on health should not be overlooked. Based on a paper on how "Wildfire smoke exposure" will increase mortality in USA over next decades (Minghao Qiu, 2025 ), that wildfire smoke would kill an estimated 70,000 Americans each year by 2050.
 
 Disasters were heavily concentrated in the Mediterranean Forest/Woodland/Scrub Biome (Europe, southern South America, western USA, South Africa, and southern Australia) and the Temperate Conifer Forest Biome (mostly western North America), where disasters occurred 12.1 and 4.1 times more than expected based on the areas of those
 biomes, respectively.
@@ -81,19 +81,19 @@ in new builds, establishing defendable space, and removing nearby fuel in the ho
 
 ## Wildfire monitoring
 
-In fact, wildfire season , in many regions, is year-round and continuous fire surveillance becomes critical to minimize potential impact in forests and communities. For a long time, watchtowers setup at hilltops have been the traditional means of wildfire monitoring, with an observation radius of up 20 km under ideal conditions (Rego, 2006). Then, automated image observation devices (e.g. video surveillance systems) mounted on watchtowers have largely replaced human observers, demonstrating superior performance during daylight hours (Günay, 2009). Even though, while automated thermal cameras enable basic 24-hour operation, there are still some limitations such visibility constraints from terrain or weather create permanent blind spots unreachable by static towers (Guangqing Zhai, 2025).
+In fact, wildfire season, in many regions, is year-round and continuous fire surveillance becomes critical to minimize potential impact in forests and communities. For a long time, watchtowers setup at hilltops have been the traditional means of wildfire monitoring, with an observation radius of up 20 km under ideal conditions (Rego, 2006). Then, automated image observation devices (e.g. video surveillance systems) mounted on watchtowers have largely replaced human observers, demonstrating superior performance during daylight hours (Günay, 2009). Even though, while automated thermal cameras enable basic 24-hour operation, there are still some limitations such visibility constraints from terrain or weather create permanent blind spots unreachable by static towers (Guangqing Zhai, 2025).
 
-Thanks to the development of time series data, advancements in new sensor systems and image processing technology, and the increased availability of free images, Remote Sensing (RS) based on satellite and radar images has been widely applied in wildfire monitoring, especially suitable for vast remote areas (Guangqing Zhai, 2025). It has been recognized that updated information on landscape fire activity is essential to aid fire management, and that information can only be provided by using satellite Earth Observation approaches (Wooster, 2021) This form of Earth observation is based on detecting the footprint or signature of the electromagnetic radiation emitted as biomass burns. Since the early 1980's active fire (AF) remote sensing conducted using Earth orbiting (LEO) satellites has been deployed in certain regions of the world to map the location and timing of landscape fire occurrence, and from the early 2000's global-scale information updated multiple times per day has been easily 100 available to all. Geostationary (GEO) satellites provide even higher frequency AF information, more than 100 times per day in some cases, and both LEO- and GEO-derived AF products now often include estimates of a fires characteristics, such as its fire radiative power output, in addition to the fires detection (Wooster, 2021). AF data provide  information relevant to fire activity ongoing when the EO data were collected, and this can be delivered with very low latency times.
+Thanks to the development of time series data, advancements in new sensor systems and image processing technology, and the increased availability of free images, Remote Sensing (RS) based on satellite and radar images has been widely applied in wildfire monitoring, especially suitable for vast remote areas (Guangqing Zhai, 2025). It has been recognized that updated information on landscape fire activity is essential to aid fire management, and that information can only be provided by using satellite Earth Observation approaches (Wooster, 2021) This form of Earth observation is based on detecting the footprint or signature of the electromagnetic radiation emitted as biomass burns. Since the early 1980's active fire (AF) remote sensing conducted using Earth orbiting (LEO) satellites has been deployed in certain regions of the world to map the location and timing of landscape fire occurrence, and from the early 2000's global-scale information updated multiple times per day has been easily available to all. Geostationary (GEO) satellites provide even higher frequency AF information, more than 100 times per day in some cases, and both LEO- and GEO-derived AF products now often include estimates of a fires characteristics, such as its fire radiative power output, in addition to the fires detection (Wooster, 2021). AF data provide  information relevant to fire activity ongoing when the EO data were collected, and this can be delivered with very low latency times.
 
 Satellite EO can be used to probe many fire characteristics, including burned area (Giglio, 2018) and the concentration and composition of smoke plumes . Active fire (AF) remote sensing primarily focuses on identifying the location, timing and radiative strength (Fire Radiative Power; FRP) of fires that are actually consuming vegetation and/or organic soil at the time the observations were made.
 
 Active fire (AF) detection and characterization is based on remote sensing of some of the approximately 20 MJ.kg-1 of energy released when vegetation and organic soil burns (Sullivan, 2008) Of the total energy released, only about 10 -20% is released as electromagnetic radiation. This radiative energy rate is far higher than from the same area of ambient land however, and its spectral distribution follows Planck's Radiation law and its derivative Wien's Displacement (Wooster, 2021). Based on this radiative analysis, there was a work to define Active Fire detection algorithms that could identify pixels that contain active fires. Those algorithms were defined to discriminate pixels with active fires from non-fire pixels, taken into consideration potential confusing effects such as sun glint, non-burning hot areas or regions with high local thermal contrast.
 
-All in all, active fire detection has evolved over time, from reporting the timing and location of actively burning fires to include measures such as fire effective  emperature, area and fire radiative power (FRP).
+All in all, active fire detection has evolved over time, from reporting the timing and location of actively burning fires to include measures such as fire effective temperature, area and fire radiative power (FRP).
 
-# Using satellite images for fire detection
+# Using Satellite Images for Fire Detection
 
-From Earth Observation (EO) satellites, we can get near real-time (NRT) data streams that can help on detection and monitoring of active fires. And there are expectations that future satellite mission, including higher spatial resolution Geostationary (GEO) systems and an increase in the number of Active Fire capable Low Earth Orbit (LEO) system, including those of small satellite constellations, will provide more opportunities to improve fire detection.
+From Earth Observation (EO) satellites, we can get near real-time (NRT) data streams that can help on detection and monitoring of active fires. And there are expectations that future satellite missions, including higher spatial resolution Geostationary (GEO) systems and an increase in the number of Active Fire capable Low Earth Orbit (LEO) system, including those of small satellite constellations, will provide more opportunities to improve fire detection.
 
 As of 2018, some authors started to map fires based on data from Sentinel-2 sensor (Fernando Rodriguez-Jimenez, 2023). The Sentinel-2 mission is part of the Copernicus Earth observation program, with twin satellites Sentinel 2A launched in 2015, and Sentinel 2B in 2017. Sentinel-2 carries multispectral imaging instruments on board. The
 spatial resolution for the output product chosen is 20 m, due to the spectral bands using the most usual indices for mapping burned areas and their severity. Fires are detected through the application of the Relativized Burn Ratio (RBR) (Sean Parks, 2014). This index is calculated from the Normalized Burn Ratio (NBR) using Band 8A and Band 12 in the pre-fire and post-fire images.
@@ -104,13 +104,13 @@ While an advantage of geostationary sensors is their temporal resolution, the po
 
 Currently, the best compromise between spatial and temporal resolution is provided by the operational active fire product derived from the 375 m VIIRS bands on board the National Polar-Orbiting Partnership (NPP) satellite since 2013 and on board the NOAA-20 since 2017. Its improved resolution, frequent acquisitions, and higher sensitivity to burning pixels allow the direct estimation of the burned area by aggregation of consecutive fire detections and the estimation of fire-driven deforestation .With two satellites in operation, the 375 m AF product time lapse between acquisitions is reduced to a few hours ensuring a higher frequency of observations providing fire behavior to fire managers and atmospheric modelers with higher resolution active fire data.
 
-All in all, satellite earth observations are used more and more to monitor, estimate fire impacts by assessing the Burned Area (BA), their spatial variation as shape, size or orientation. An new algorithms have been developed for measuring Burned Area, incorporating machine learning approaches. Let's show an example using Moderate Resolution Imaging Spectroradiometer (MODIS) sensor image (Rui Ba, 2019 ), from the MODIS data of several wildfires in the American states of Nevada, Washington and California in 2016. They utilized a back-propagation neural network (BPNN) to learn the spectral differences of different types from the training sample sets and obtain the output burned area map.
+All in all, satellite earth observations are used more and more to monitor, estimate fire impacts by assessing the Burned Area (BA), their spatial variation as shape, size or orientation. New algorithms have been developed for measuring Burned Area, incorporating machine learning approaches. Let's show an example using Moderate Resolution Imaging Spectroradiometer (MODIS) sensor image (Rui Ba, 2019 ), from the MODIS data of several wildfires in the American states of Nevada, Washington and California in 2016. They utilized a back-propagation neural network (BPNN) to learn the spectral differences of different types from the training sample sets and obtain the output burned area map.
 
 ![](images/image2.png)
 
-## Our Approach to Wildfire Detection
+# Our Approach to Wildfire Detection
 
-### Hypothesis: 
+### Hypothesis
 
 Our hypothesis is that combining Sentinel-2 multispectral imagery with state-of-the-art deep learning segmentation architectures and high-quality labeled datasets from CEMS can produce a system that:
 
@@ -160,14 +160,11 @@ The NVIDIA L4 GPU provided sufficient VRAM for all training runs, including the 
 | Satellite data access    | **planetary-computer + pystac-client** — STAC API queries to Microsoft Planetary Computer for Sentinel-2 L2A imagery |
 | Package management       | **uv** — fast dependency resolution and virtual environment management |
 
-### 
-
 ### Datasets
 
-#### From where gather data. 
+#### From Where to Gather Data
 
-We have been looking at different sources of satellite data, and we have selected data from new sensors as Sentinel-2, because of its availability for medium-high spatial resolution of optical satellite data. This helps a more detailed assessment of small fires than other Burned Area products. Sentinel-2 is offered by the Copernicus Program,
-and offers a time series data of burned areas, with high revisit frequency, with improved spatial and spectral resolution of the MSI optical sensor (Filipponi, 2019).
+We have been looking at different sources of satellite data, and we have selected data from new sensors as Sentinel-2, because of its availability for medium-high spatial resolution of optical satellite data. This helps a more detailed assessment of small fires than other Burned Area products. Sentinel-2 is offered by the Copernicus Program, and offers a time series data of burned areas, with high revisit frequency, with improved spatial and spectral resolution of the MSI optical sensor (Filipponi, 2019).
 
 Sentinel-2 is the most used satellite for mapping the precise perimeter of a fire. They use SWIR (Short-Wave Infrared) Bands. While standard cameras only see smoke, Sentinel-2's Bands 11 and 12 can \"see\" the heat of the fire through the smoke. On a map, active fire fronts appear as glowing orange or red lines. (CEMS, Sentinel-2 Documentation, n.d.).
 
@@ -179,12 +176,12 @@ The satellite imagery comes from Sentinel-2 L2A, which spans across 12 distinct 
 
 Then, we need to refer as well to Sentinel-3 (The \"Thermometer in the Sky\" (Global Monitoring) While Sentinel-2 takes a \"snapshot\" every few days, Sentinel-3 provides a broader daily view of the entire planet. It helps with Active Fire Detection. It uses a sensor called SLSTR that acts like a thermometer. It can detect \"hotspots\" and measure FRP (Fire Radiative Power) a metric that tells firefighters how intense the fire is and how fast it consumes fuel. And it provides a World Fire Atlas. Sentinel-3 data is used to maintain a global map of all active fires occurring at night, helping agencies track the spread of wildfires across entire continents.
 
-#### Dataset sources and selection 
+#### Dataset Sources and Selection
 
 The Copernicus Emergency Management Service (CEMS) is a component of the European Union\'s Copernicus Program. It provides rapid geospatial information during emergencies, and damage assessment for events such as floods, wildfires, and earthquakes. In particular, Copernicus Rapid Mapping provides on-demand mapping services in cases of various natural disasters, offering detailed and up-to-date geospatial information that assists in disaster management and risk assessment (CEMS, CEMS Rapid Mapping, n.d.).
 
-The Copernicus Emergency Management Service (CEMS) Wildfire dataset spans from June 2017 to April 2023. The dataset includes Sentinel-2 images related to wildfires, along with their respective severity and delineation masks. Additionally, the dataset is enhanced with cloud and landcover masks, providing more valuable information for future training of a semantic segmentation model. The dataset comprises over 500+ high-quality images, suitable for subsequent semantic segmentation model training. The dataset is available on [Huggingface](https://huggingface.co/datasets/links-ads/wildfires-cems).
-(Hugginface, n.d.).
+The Copernicus Emergency Management Service (CEMS) Wildfire dataset spans from June 2017 to April 2023. The dataset includes Sentinel-2 images related to wildfires, along with their respective severity and delineation masks. Additionally, the dataset is enhanced with cloud and landcover masks, providing more valuable information for future training of a semantic segmentation model. The dataset comprises over 500 high-quality images, suitable for subsequent semantic segmentation model training. The dataset is available on [Huggingface](https://huggingface.co/datasets/links-ads/wildfires-cems).
+(Huggingface, n.d.).
 
   -----------------------------------------------------------------------
   ![](images/image4.png)                                          
@@ -304,7 +301,7 @@ Seven Sentinel-2 bands are selected that carry the most discriminative informati
 
 NDVI (Normalized Difference Vegetation Index) is appended as the 8th channel, computed as:
 
-NDVI = (NIR- Red)//NIR+Red) where NIR is the reflectance value of the Near Infrared.
+NDVI = (NIR - Red) / (NIR + Red) where NIR is the reflectance value of the Near Infrared.
 
 High NDVI indicates healthy vegetation; low NDVI indicates burned areas, water, bare soil, and shadow. NDVI was recommended as a key discriminator for separating burn scars from other low-reflectance surfaces. Using NDVI as an explicit channel proved beneficial it helps the model discriminate fire damage from spectrally similar
 confounders.
@@ -362,9 +359,9 @@ Splits are done at the **activation level** (not patch level) to prevent data le
   | Test  | Activations 2023        | scene4 (504 patches)            |
 
 
-# Model architectures and training
+# Model Architectures and Training
 
-Four families of models were developed and compared: SMP pretrained encoder-decoder models (primary), U-Net from scratch (secondary primary), CNN from scratch (secondary), and YOLOv8-Seg (secondary). All models receive 8-channel input (7 Sentinel-2 bands + NDVI) and are trained on combined CEMS + Sen2Fire data.
+Four families of models were developed and compared: SMP pretrained encoder-decoder models (primary), U-Net from scratch (secondary), CNN from scratch (secondary), and YOLOv8-Seg (secondary). All models receive 8-channel input (7 Sentinel-2 bands + NDVI) and are trained on combined CEMS + Sen2Fire data.
 
 Primary metric for model selection: Fire IoU (Intersection over Union on the fire class). Secondary metrics: Fire Dice, Fire Recall, Mean IoU, and Detection F1.
 
@@ -466,13 +463,13 @@ Combining CEMS DEL (European fires, expert labeled) with Sen2Fire (Australian fi
 Command to run the experiments:
 
 ```bash
-uv run python train_combined_binary.py \\\
-\--patches-dir ../patches \\\
-\--sen2fire-dir ../data-sen2fire \\\
-\--output-dir ./output/v3_combined_binary_resnet50_unetpp \\\
-\--encoder resnet50 \\\
-\--architecture unetplusplus \\\
-\--epochs 50
+uv run python train_combined_binary.py
+--patches-dir ../patches
+--sen2fire-dir ../data-sen2fire
+--output-dir ./output/v3_combined_binary_resnet50_unetpp
+--encoder resnet50
+--architecture unetplusplus
+--epochs 50
 ```
 
 **Results:**
@@ -500,7 +497,7 @@ Training time for ResNet50 + U-Net++: approximately 30 minutes on a single NVIDI
 
 *Loss and fire IoU evolution over epochs*
 
-##### Conclusions:
+#### Conclusions
 
 The hypothesis is confirmed. ResNet50 + U-Net++ achieves the highest Fire IoU (0.779), placing our results in the upper range of published Sentinel-2 fire segmentation benchmarks (typically 0.65--0.90). The combined CEMS + Sen2Fire training provides geographic diversity that improves generalization. High Fire Recall (0.93) is particularly important operationally --- missing a fire is worse than a false alarm. The pretrained ResNet50 encoder provides robust feature representations that transfer effectively from ImageNet to 8-channel satellite imagery.
 
@@ -529,8 +526,7 @@ The command to execute the experiment is:
 
 ```bash
 uv run python train_severity_finetune.py
---checkpoint
-./output/v3_combined_binary_resnet50_unetpp/checkpoints/best_model.pt
+--checkpoint ./output/v3_combined_binary_resnet50_unetpp/checkpoints/best_model.pt
 --patches-dir ../patches_gra
 --output-dir ./output/v3_finetune_severity_resnet50_unetpp
 --epochs 30
@@ -553,13 +549,13 @@ Training time: approximately 10--20 minutes per model.
 
 *ResNet34 U-Net++ vs U-Net baseline comparison*
 
-##### Conclusions:
+#### Conclusions
 
 The two-phase approach works as designed. Binary fire detection performance is preserved from Phase 1 the frozen encoder and binary head continue to produce accurate fire maps. The severity head learns a meaningful 5-class severity map with Mean IoU 0.34 and Fire IoU (severity) 0.41. These values are in line with expectations for 5-class remote sensing segmentation: the \"no damage\" class dominates the scene, class boundaries are fine-grained, and expert annotations can disagree at severity boundaries. The dual-head design produces a single model that outputs both binary fire maps and severity maps in one forward pass, enabling efficient inference in the application.
 
 A notable finding from W&B GPU monitoring: the DeepLabV3+ severity fine-tuning run showed GPU utilization as low as 300--500 MHz SM clock (compared to 1500--2000 MHz for U-Net variants), indicating a data pipeline bottleneck rather than a compute bottleneck. This explains its comparatively lower severity performance.
 
-##### Compute Resources
+#### Compute Resources
 
 | Phase     | Model            | GPU Memory   | Training Time        | Checkpoint Size |
   |-----------|------------------|--------------|----------------------|-----------------|
@@ -831,7 +827,7 @@ Training time: the slowest model family approximately 63--70 minutes per run.
 
 #### Conclusions
 
-YOLO achieves the weakest results (mAP50-95 0.44) of all models evaluated. The main reason is a significant **domain gap** between COCO (the source of YOLO\'s pretrained weights) and satellite wildfire imagery. COCO contains everyday RGB photographs of objects at human scale; our data consists of 8-channel multispectral Sentinel-2 images of burned landscapes seen from 10 m altitude. The backbone never saw anything resembling fire scars, smoke plumes, or multispectral reflectance patterns during pretraining. As a result, the pretrained features transfer poorly and the model must relearn relevant representations with very limited domain-specific data.
+YOLO achieves the weakest results (mAP50-95 0.44) of all models evaluated. The main reason is a significant **domain gap** between COCO (the source of YOLO\'s pretrained weights) and satellite wildfire imagery. COCO contains everyday RGB photographs of objects at human scale; our data consists of 8-channel multispectral Sentinel-2 images of burned landscapes at 10 m spatial resolution. The backbone never saw anything resembling fire scars, smoke plumes, or multispectral reflectance patterns during pretraining. As a result, the pretrained features transfer poorly and the model must relearn relevant representations with very limited domain-specific data.
 
 Beyond the domain gap, the detection-style task formulation is a poor fit for burned area mapping. Burned areas are large, spatially diffuse regions that span most of a tile --- not discrete objects with clear bounding boxes. YOLO\'s detection head is designed for locating individual objects, so it struggles with fire perimeters that are irregular and occupy the majority of the scene. Pixel-wise segmentation models are fundamentally better suited to this problem.
 
@@ -899,7 +895,7 @@ Two models were selected for integration into the fire detection application:
 
 Despite operating without any transfer learning, the U-Net from scratch comes remarkably close to the best pretrained model (only 0.034 Fire IoU below ResNet50 U-Net++). This demonstrates that the U-Net encoder-decoder architecture with skip connections is highly effective for satellite fire segmentation even when learned entirely from the task data.
 
-### Why the other models were not selected
+### Why the Other Models Were Not Selected
 
 **CNN Scratch** performs patch-level classification, not pixel-wise segmentation. It cannot produce per-pixel fire masks required for area estimation, perimeter calculation, or map overlays. Its F1 of 0.60 with precision 0.36 also reflects operational unreliability.
 
@@ -1020,7 +1016,7 @@ Future directions include multi-temporal analysis for fire spread detection, aut
 # Bibliography
 
 Anh Tran 1, M. T. (2025). Land8Fire: A Complete Study on Wildfire
-Segmentation. *REmote sensing 17(16)*.
+Segmentation. *Remote Sensing 17(16)*.
 
 Calum X. Cunningham1\*, J. T. (2025). Climate-linked escalation of
 societally disastrous 1 wildfires. *Science Vol 390, Issue 6768*, 53-58.
@@ -1059,7 +1055,7 @@ Günay, O. T. (2009). Video based wildfire detection at. *Fire Saf. J.,
 He, K. Z. (2016). Deep Residual Learning for Image Recognition. *CVPR
 2015*, 771-774.
 
-Hugginface. (n.d.). *Huggingface dataset*. Retrieved from
+Huggingface. (n.d.). *Huggingface dataset*. Retrieved from
 huggingface.co/datasets/links-ads/wildfires-cems
 
 Lisa Knopp \*, M. ,. (2020). A Deep Learning Approach for Burned Area
@@ -1070,7 +1066,7 @@ github.com/MatteoM95/CEMS-Wildfire-Dataset
 
 Minghao Qiu, J. L.-N. (2025 ). Wildfire smoke exposure and mortality
 burden in the USA under climate change. *Nature*, Number 647,
-pages935--943.
+pages 935--943.
 
 Oliva, E. C. (2020). Satellite Remote Sensing Contributions to Wildland
 Fire Science and management. *Fire Science Management* , 81-96.
