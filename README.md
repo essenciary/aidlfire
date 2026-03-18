@@ -182,7 +182,7 @@ The Copernicus Emergency Management Service (CEMS) Wildfire dataset spans from J
 (Huggingface, n.d.).
 
   -----------------------------------------------------------------------
-  ![](images/image4.png)                                          
+  ![](images/image4_resized.png)                                          
   -----------------------------------------------------------------------
 
 
