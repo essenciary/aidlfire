@@ -44,6 +44,8 @@ Sen2Fire.zip
 # Generated patches
 patches/
 patches_*/
+_patches_*/
+
 
 # Numpy/tensor files (usually data)
 *.npy
@@ -62,6 +64,8 @@ patches_*/
 checkpoints/
 output/
 outputs/
+_output_*/
+output_*/
 runs/
 logs/
 *.ckpt

@@ -96,6 +96,23 @@ def cloud_score_7ch(image_7ch: np.ndarray) -> float:
     )
 
 
+_S2CLOUDLESS_DETECTOR = None  # Cached S2PixelCloudDetector instance
+
+
+def _get_s2cloudless_detector():
+    """Lazy-load and cache S2PixelCloudDetector (expensive to create)."""
+    global _S2CLOUDLESS_DETECTOR
+    if _S2CLOUDLESS_DETECTOR is None:
+        try:
+            from s2cloudless import S2PixelCloudDetector
+            _S2CLOUDLESS_DETECTOR = S2PixelCloudDetector(
+                threshold=0.4, average_over=4, dilation_size=2, all_bands=False
+            )
+        except ImportError:
+            return None
+    return _S2CLOUDLESS_DETECTOR
+
+
 def get_cloud_fraction_s2cloudless(
     image: np.ndarray,
     *,
@@ -114,9 +131,8 @@ def get_cloud_fraction_s2cloudless(
         Cloud fraction in [0, 1], or None if s2cloudless is not installed or
         band count doesn't match (caller should use rule-based fallback).
     """
-    try:
-        from s2cloudless import S2PixelCloudDetector
-    except ImportError:
+    detector = _get_s2cloudless_detector()
+    if detector is None:
         return None
 
     # s2cloudless all_bands=False expects 11 bands (MODEL_BAND_IDS: indices 0,1,3,4,7,8,9,10,11,12 from 13-band L1C).
@@ -129,9 +145,6 @@ def get_cloud_fraction_s2cloudless(
     if bands.shape[-1] != 11:
         return None
     try:
-        detector = S2PixelCloudDetector(
-            threshold=0.4, average_over=4, dilation_size=2, all_bands=False
-        )
         if bands.ndim == 3:
             cloud_probs = detector.get_cloud_probability_maps(np.expand_dims(bands, 0))
             return float(np.mean(cloud_probs[0]))

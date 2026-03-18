@@ -19,6 +19,7 @@ A data processing pipeline for the CEMS Wildfire Dataset, designed to prepare Se
 - [Class Imbalance Analysis](#class-imbalance-analysis)
 - [Data Augmentation](#data-augmentation)
 - [Model Training](#model-training)
+- [Exporting W&B Runs](#exporting-wb-runs)
 - [Inference Pipeline](#inference-pipeline)
 - [Streamlit Web App](#streamlit-web-app)
 - [Visualization Tools](#visualization-tools)
@@ -130,6 +131,26 @@ uv run python train_sen2fire_finetune.py \
 
 Result: a single model that outputs both **binary fire** and **severity** maps. In the app, use the "Show binary fire map" and "Show severity map" toggles to compare. History stores both maps for dual-head results.
 
+### Alternative: Combined Binary → Severity workflow
+
+For maximum geographic diversity, train binary on **CEMS + Sen2Fire combined**, then add severity on CEMS GRA only. See [docs/COMBINED_BINARY_SEVERITY_WORKFLOW.md](../docs/COMBINED_BINARY_SEVERITY_WORKFLOW.md) for details.
+
+```bash
+# Phase 1: Combined binary (CEMS DEL + Sen2Fire)
+uv run python run_pipeline.py --dataset-dir ../wildfires-cems --output-dir ./patches --mask-type DEL
+uv run python train_combined_binary.py \
+    --patches-dir ./patches \
+    --sen2fire-dir ../data-sen2fire \
+    --output-dir ./output/combined_binary
+
+# Phase 2: Severity fine-tune (CEMS GRA only)
+uv run python run_pipeline.py --dataset-dir ../wildfires-cems --output-dir ./patches_gra --mask-type GRA
+uv run python train_severity_finetune.py \
+    --checkpoint ./output/combined_binary/checkpoints/best_model.pt \
+    --patches-dir ./patches_gra \
+    --output-dir ./output/severity_finetune
+```
+
 ### Run the Web App
 
 ```bash
@@ -215,6 +236,7 @@ Raw Sentinel-2 GeoTIFFs     →     256×256 Patches     →     PyTorch DataLoa
 | `model.py` | U-Net segmentation model with loss functions |
 | `metrics.py` | Evaluation metrics for segmentation and detection |
 | `train.py` | Training script with checkpointing and W&B logging |
+| `export_wandb_runs.py` | Export W&B runs to CSV/JSON for local analysis |
 | `visualize.py` | Tools for visualizing patches and source images |
 | `remove_catalan_data.py` | Move Catalan fire data to separate folder for regional testing |
 | `inference.py` | Inference pipeline for running trained models |
@@ -1108,6 +1130,29 @@ Key options:
   --wandb                 Enable W&B logging
   --resume PATH           Resume from checkpoint
 ```
+
+### Exporting W&B Runs
+
+Export all training runs from Weights & Biases to CSV/JSON for local analysis:
+
+```bash
+# Export summary metrics and config to CSV (default: wandb_runs_export.csv)
+uv run python export_wandb_runs.py
+
+# Custom output path
+uv run python export_wandb_runs.py -o ./wandb_export.csv
+
+# Also export full JSON
+uv run python export_wandb_runs.py --json ./wandb_runs.json
+
+# Export per-step history (loss, metrics per epoch) to separate CSVs
+uv run python export_wandb_runs.py --history --history-dir ./wandb_history
+
+# Specify entity if project is under a team
+uv run python export_wandb_runs.py --entity your-team --project fire-detection
+```
+
+Requires `wandb login` (or `WANDB_API_KEY`). Output includes `run_id`, `run_name`, summary metrics (e.g. `val_loss`, `fire_dice`), and config (e.g. `config.lr`, `config.batch_size`).
 
 ### Using the Trained Model
 

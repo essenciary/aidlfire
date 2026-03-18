@@ -30,7 +30,6 @@ CEMS-Wildfire-Dataset-main/
 │   ├── analyze_patches.py      # Class imbalance analysis
 │   ├── download_dataset.py     # Download from HuggingFace
 │   ├── remove_catalan_data.py  # Regional data separation
-│   ├── CLAUDE.md               # Detailed technical context
 │   ├── PATCHES.md              # Patch format documentation
 │   └── README.md               # Usage instructions
 │
@@ -148,11 +147,21 @@ uv sync --extra train
 uv run python train.py --patches-dir ./patches --output-dir ./output/run1 --num-classes 2 --wandb
 ```
 
+### Task: Combined binary + severity workflow (CEMS + Sen2Fire)
+```bash
+cd fire-pipeline
+# Phase 1: Binary on CEMS DEL + Sen2Fire
+uv run python train_combined_binary.py --patches-dir ./patches --sen2fire-dir ../data-sen2fire --output-dir ./output/combined_binary
+# Phase 2: Severity on CEMS GRA only
+uv run python train_severity_finetune.py --checkpoint ./output/combined_binary/checkpoints/best_model.pt --patches-dir ./patches_gra --output-dir ./output/severity_finetune
+```
+See `docs/COMBINED_BINARY_SEVERITY_WORKFLOW.md` for full details.
+
 ## File Quick Reference
 
 | If you need... | Look at... |
 |----------------|------------|
-| Technical specs | `fire-pipeline/CLAUDE.md` |
+| Technical specs | `fire-pipeline/PATCHES.md` |
 | Beginner explanations | `AIDL_PROJECT_GUIDE.md` |
 | Data file formats | `DATA_REFERENCE.md` |
 | Patch details | `fire-pipeline/PATCHES.md` |
@@ -160,12 +169,18 @@ uv run python train.py --patches-dir ./patches --output-dir ./output/run1 --num-
 | Augmentation code | `fire-pipeline/dataset.py` |
 | Model architecture | `fire-pipeline/model.py` |
 | Training script | `fire-pipeline/train.py` |
+| Data pipeline | `docs/DATA_PIPELINE.md` |
+| Training pipeline | `docs/TRAINING_PIPELINE.md` |
+| Data & training pipeline (consolidated slides) | `docs/DATA_AND_TRAINING_PIPELINE.md` |
 | Evaluation metrics | `fire-pipeline/metrics.py` |
 | Pipeline usage | `fire-pipeline/README.md` |
+| Combined binary + severity workflow | `docs/COMBINED_BINARY_SEVERITY_WORKFLOW.md` |
+| V3 pipeline architectures & training commands | `docs/V3_PIPELINE_ARCHITECTURES.md` |
 | Dataset loading | `fire-pipeline/dataset.py` |
 | Patch generation | `fire-pipeline/patch_generator.py` |
 | Inference pipeline | `fire-pipeline/inference.py` |
 | Web app | `fire-pipeline/app.py` |
+| App overview (tech, features, architecture) | `docs/APP.md` |
 | Satellite data fetching | `fire-pipeline/satellite_fetcher.py` |
 | Local storage/caching | `fire-pipeline/storage.py` |
 
