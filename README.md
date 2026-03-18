@@ -52,12 +52,13 @@
 - [Conclusions](#conclusions-1)
 - [Bibliography](#bibliography)
 - [Resource Links](#resource-links)
+  - [Literature Mentioned](#literature-mentioned)     
 # Abstract
 
 This project is based on the motivation to improve detection of wildfires through selected datasets from satellite imagery and leveraging a number of deep learning models to find out the best fit in terms of precision and performance. It makes a recommendation on which deep learning approaches fit better to wildfire detection and we show how those deep learning models work on fire detection through an application that scans satellite images across a selected geographical area.
 
 Wildfires have been a major concern because of the change in their behavior, their speed and their destructive capacity. Wildfires have increased fourfold in the number of disastrous events from 1980 to 2023, imposing enormous economic and human costs, particularly in Mediterranean and Temperate Conifer Forest biomes. On the other hand,
-over the last years, a new series of data collected through Copernicus Emergency Management System (CEMS), from Sentinel-x satellites together with the development of a number of deep learning models on classification and segmentation of images is providing a solid foundation for developing deep learning based architectures and applications that can improve fire detection accuracy.
+over the last years, a new series of data collected through Copernicus Emergency Management System (CEMS), from Sentinel-x satellites together with the development of a number of deep learning models on classification and segmentation of images is providing a solid foundation for developing deep learning based architectures and applications that can improve fire detection performance.
 
 Our focus has been on fire detection at the Catalonia geographical area, nevertheless we have relied on datasets from CEMS across the world. Our objective has been to build a deep learning system that detects active wildfires and burned areas from Sentinel-2 satellite imagery, with a focus on the Catalonia region. The system should provide near-real-time detection capabilities, fire area measurement, spread analysis, and automated alerts.
 
@@ -101,7 +102,7 @@ spatial resolution for the output product chosen is 20 m, due to the spectral ba
 
 The new generation of geostationary satellites provides observations every 10 to 15 min at an improved spatial resolution (2--3 km) making it possible to detect short-lived fires not detectable by polar-orbiting satellites and to track in detail the evolution of the fire line and fire radiative power (Oliva, 2020). In addition, they have enhanced sensors that provide information on 12--16 spectral bands with improved radiometry of 10--14 bits. They introduce a substantial improvement in spatial, temporal, spectral, and radiometric resolution over their predecessors, which correspondingly relates to an enhanced capability for fire detection.
 
-While an advantage of geostationary sensors is their temporal resolution, the polar-orbiting sensors have finer spatial resolution, which ensures higher accuracy at locating and mapping thermal anomalies. AF detections are produced using different polar-orbiting sensors, such as MODIS , the Visible Infrared Imaging Radiometer Suite (VIIRS), FengYun-3C VIRR, Landsat-8 OLI, TET-1, and Firebird.
+While an advantage of geostationary sensors is their temporal resolution, the polar-orbiting sensors have finer spatial resolution, which ensures better performance at locating and mapping thermal anomalies. AF detections are produced using different polar-orbiting sensors, such as MODIS , the Visible Infrared Imaging Radiometer Suite (VIIRS), FengYun-3C VIRR, Landsat-8 OLI, TET-1, and Firebird.
 
 Currently, the best compromise between spatial and temporal resolution is provided by the operational active fire product derived from the 375 m VIIRS bands on board the National Polar-Orbiting Partnership (NPP) satellite since 2013 and on board the NOAA-20 since 2017. Its improved resolution, frequent acquisitions, and higher sensitivity to burning pixels allow the direct estimation of the burned area by aggregation of consecutive fire detections and the estimation of fire-driven deforestation .With two satellites in operation, the 375 m AF product time lapse between acquisitions is reduced to a few hours ensuring a higher frequency of observations providing fire behavior to fire managers and atmospheric modelers with higher resolution active fire data.
 
@@ -199,12 +200,12 @@ The **Copernicus Emergency Management Service (CEMS) Wildfire dataset** is the p
 
 -   275 fire activations (approximately 560 image tiles).
 -   19 European countries, with emphasis on the Mediterranean region.
--   Temporal range: 2017--2023.
--   Temporal split used: 2017--2021 train, 2022 validation, 2023 test (split at activation level to prevent data leakage).
+-   Temporal range: 2017-2023.
+-   Temporal split used: 2017-2021 train, 2022 validation, 2023 test (split at activation level to prevent data leakage).
 
 **Spectral content:**
 
--   12 Sentinel-2 L2A bands at 10--20 m spatial resolution.
+-   12 Sentinel-2 L2A bands at 10-20 m spatial resolution.
 -   7 bands selected for training: B02 (Blue), B03 (Green), B04 (Red), B08 (NIR), B8A (NIR-narrow), B11 (SWIR1), B12 (SWIR2).
 -   NDVI computed and appended as 8th channel. This one provides with a vegetation information that it is very useful for our proposal.
 
@@ -317,15 +318,15 @@ Patches with more than 50% cloud coverage (from the CEMS CM mask) are rejected d
 
 Extracted patches are saved as NumPy binary files:
 
--   \*\_image.npy --- shape (256, 256, 8), float32, normalized to [0, 1]
+-   \*\_image.npy - shape (256, 256, 8), float32, normalized to [0, 1]
 
--   \*\_mask.npy --- shape (256, 256), uint8, values 0/1 (DEL) or 0--4 (GRA)
+-   \*\_mask.npy - shape (256, 256), uint8, values 0/1 (DEL) or 0--4 (GRA)
 
 Two output directories are produced:
 
--   patches/ --- DEL binary masks (used in Phase 1)
+-   patches/ - DEL binary masks (used in Phase 1)
 
--   patches_gra/ --- GRA severity masks (used in Phase 2)
+-   patches_gra/ - GRA severity masks (used in Phase 2)
 
 **Class weights:**
 
@@ -458,7 +459,7 @@ A detection-style approach (YOLOv8-Seg) can identify individual fire instances i
   | Architecture | YOLOv8n-seg, ~3.2M params                               |                                                                                                            
   | Metric       | mAP50-95                                                 |                                                                                                           
   | Tuning       | Ray Tune, 4 trials, top-3 re-trained                     |                                                                                                           
-  | Flags        | `--yolo-imgsz 256 --yolo-batch 8` (memory-optimized)     |  
+  | Flags        | `--yolo`'  |  
 
 **Hyperparameter search space:**
 
@@ -719,13 +720,13 @@ uv run python train_combined_binary.py
 
 **Results:**
 
-| Architecture                | Fire IoU     | Det F1 | Fire Recall | Epochs to best |
-  |-----------------------------|--------------|--------|-------------|----------------|
+| Architecture                | Fire IoU     | Det F1 | Fire Recall |
+  |-----------------------------|--------------|--------|-------------|
   | resnet50_unetplusplus       | **0.7791**   | 0.8455 | 0.9286      | 27             |                                                                                                
   | resnet50_deeplabv3plus      | 0.7724       | 0.8587 | 0.9181      | ---            |                                                                                                
   | resnet18_unet               | 0.7654       | 0.8351 | 0.9218      | ---            |                                                                                                
   | resnet34_unet               | 0.7650       | 0.8524 | 0.9286      | 17             |                                                                                                
-  | efficientnet-b2_unetplusplus| 0.7612       | 0.8711 | 0.9356      | ---            |
+  | efficientnet-b2_unetplusplus| 0.7612       | 0.8711 | 0.9356      |
   | mobilenet_v2_unet           | 0.7572       | 0.8612 | 0.9141      | ---            |   
 
 Training time for ResNet50 + U-Net++: approximately 30 minutes on a single NVIDIA L4 GPU.
@@ -775,14 +776,19 @@ uv run python train_severity_finetune.py
 
 **Results:**
 
-  | Architecture                | Mean IoU     | Fire IoU (severity) | Epochs to best |
-  |-----------------------------|--------------|---------------------|----------------|
+  | Architecture                | Mean IoU     | Fire IoU (severity) |
+  |-----------------------------|--------------|---------------------|
   | resnet50_unetplusplus       | **0.3444**   | **0.4069**          | 15             |                                                                                                 
   | efficientnet-b2_unetplusplus| 0.3388       | 0.3863              | ---            |                                                                                                 
   | resnet34_unet               | 0.3352       | 0.3715              | ---            |                                                                                                 
   | resnet50_deeplabv3plus      | 0.3329       | 0.3092              | ---            |                                                                                                 
-  | mobilenet_v2_unet           | 0.3317       | 0.3638              | ---            |
+  | mobilenet_v2_unet           | 0.3317       | 0.3638              |
   | resnet18_unet               | 0.3240       | 0.3641              | ---            |  
+
+Mean IoU of 0.34 and fire IoU of 0.41 are in line with expectations for 5-class severity grading. Severity mapping is harder than binary detection because:                                                                                                                                                                              
+  1. Classes are fine-grained (negligible vs moderate vs high damage)                                                                                                                 
+ 2. The "no damage" class dominates (class imbalance)                                                                                                                                
+  3. Expert annotations can disagree on boundaries  
 
 Training time: approximately 10--20 minutes per model.
 
@@ -798,31 +804,62 @@ A notable finding from W&B GPU monitoring: the DeepLabV3+ severity fine-tuning r
 
 #### Compute Resources
 
-| Phase     | Model            | GPU Memory   | Training Time        | Checkpoint Size |
-  |-----------|------------------|--------------|----------------------|-----------------|
-  | Phase 1   | ResNet34 + U-Net | ~6–8 GB      | ~15 min (17 epochs)  | 94 MB           |                                                                                              
-  | Phase 1   | ResNet50 + U-Net++| ~10–12 GB   | ~30 min (27 epochs)  | 188 MB          |                                                                                              
+| Phase     | Model            | GPU Memory   | Training Time        |
+  |-----------|------------------|--------------|----------------------|
+  | Phase 1   | ResNet34 + U-Net | ~6–8 GB      | ~15 min (17 epochs)  | MB           |                                                                                              
+  | Phase 1   | ResNet50 + U-Net++| ~10–12 GB   | ~30 min (27 epochs)  | MB          |                                                                                              
   | Phase 2   | Either           | ~6–12 GB     | ~10–20 min           | ---             |                                                                                              
   | Inference | ResNet34 + U-Net | ~2 GB        | ~10–20 ms/patch      | ---             |                                                                                              
   | Inference | ResNet50 + U-Net++| ~4 GB       | ~20–40 ms/patch      | ---             | 
 
 **Compute infrastructure:** Google Cloud Platform, instance g2-standard-4 (4 vCPUs, 16 GB RAM), NVIDIA L4 GPU, 500 GB disk, Debian 11.
 
-### Results Comparison
+### Results
 
-#### Summary Table
+#### Summary Tables
 
- | Model                  | Task                   | Fire IoU          | Fire Dice        | Mean IoU         | Params       |
-  |------------------------|------------------------|-------------------|------------------|------------------|--------------|
-  | ResNet50 U-Net++       | Binary (Phase 1)       | **0.779**         | 0.846            | ---              | ~49M         |                                                          
-  | ResNet50 U-Net++       | Severity (Phase 2)     | 0.407             | ---              | **0.344**        | ~49M         |                                                          
-  | ResNet50 DeepLabV3+    | Binary (Phase 1)       | 0.772             | 0.859            | ---              | ~35M         |                                                          
-  | ResNet34 U-Net         | Binary (Phase 1)       | 0.765             | 0.852            | ---              | ~24.5M       |                                                          
-  | EfficientNet-B2 U-Net++| Binary (Phase 1)       | 0.761             | 0.871            | ---              | ~33M         |                                                          
-  | MobileNetV2 U-Net      | Binary (Phase 1)       | 0.757             | 0.861            | ---              | ~6M          |                                                          
-  | **U-Net Scratch**      | Binary                 | **0.745**         | **0.854**        | **0.853**        | **~118K**    |                                                          
-  | CNN Scratch            | Binary (patch)         | --- (F1: 0.60)    | ---              | ---              | ~97K         |                                                          
-  | YOLO                   | Binary (detect)        | --- (mAP: 0.44)   | ---              | ---              | ~3.2M        | 
+We then compare the results of our models with those of similar projects cited in the literature. This gives us a clearer picture of how the results obtained perform. We break down the results by task performed
+
+Binary Classification:
+| Model                | Val F1    |
+  |----------------------|-----------|
+  | CNN from Scratch     | 0.60      |                                                                                                                                                  
+  | Literature baseline  | 0.97 [(1)](#literature-mentioned)  | 
+  
+
+Object Detection:
+
+| Model               | mAP50-95  |
+  |---------------------|-----------|
+  | YOLO v8             | 0.44      |                                                                                                                                                   
+  | Literature baseline | 0.83 [(2)](#literature-mentioned)  | 
+
+  Binary Segmentation:
+
+  | Model                      | Fire IoU     | Fire Dice | Fire Recall |                                                                                                               
+  |----------------------------|--------------|-----------|-------------|                                                                                                               
+  | ResNet50 + U-Net++         | **0.7791**   | 0.8455    | 0.9286      |                                                                                                               
+  | ResNet50 + DeepLabV3+      | 0.7724       | 0.8587    | 0.9181      |                                                                                                               
+  | ResNet18 + U-Net           | 0.7654       | 0.8351    | 0.9218      |                                                                                                               
+  | ResNet34 + U-Net           | 0.7650       | 0.8524    | 0.9286      |                                                                                                               
+  | EfficientNet-B2 + U-Net++  | 0.7612       | 0.8711    | 0.9356      |                                                                                                               
+  | MobileNetV2 + U-Net        | 0.7572       | 0.8612    | 0.9141      |                                                                                                               
+  | U-Net from Scratch         | 0.7453       | 0.8541    | 0.8782      |                                                                                                               
+  | Literature baseline        |      0.87[(3)](#literature-mentioned)        |     --      |      --       | 
+
+  Severity Segmentation:
+  | Model                      | Fire IoU (severity) | Fire Recall | Mean IoU     |                                                                                                     
+  |----------------------------|---------------------|-------------|--------------|                                                                                                     
+  | ResNet50 + U-Net++         | **0.4069**          | 0.6246      | **0.3444**   |                                                                                                     
+  | EfficientNet-B2 + U-Net++  | 0.3863              | 0.5965      | 0.3388       |                                                                                                     
+  | ResNet34 + U-Net           | 0.3715              | 0.5655      | 0.3352       |                                                                                                     
+  | ResNet50 + DeepLabV3+      | 0.3092              | 0.5124      | 0.3329       |                                                                                                     
+  | MobileNetV2 + U-Net        | 0.3638              | 0.5579      | 0.3317       |                                                                                                     
+  | ResNet18 + U-Net           | 0.3641              | 0.5753      | 0.3240       |                                                                                                     
+  | Literature baseline        |                     |             | 0.75 [(4)](#literature-mentioned)     | 
+
+
+
 
 ### Discussion
 
@@ -846,7 +883,6 @@ GPU utilization during training:
 
 -   DeepLabV3+ (severity): GPU SM clock dropped to 300--500 MHz due to data pipeline bottleneck.
 
-No ECC memory errors were observed across any run, indicating stable VRAM behavior throughout the training campaign.
 
 # Model Selection for Application
 
@@ -1086,6 +1122,8 @@ Image Segmentation. . *DLMIA @ MICCAI 2018. Springer LNCS 11045,*, 3-11.
 
 # Resource links
 
+
+
  | Resource                          | URL                                                                                                                  |
   |-----------------------------------|----------------------------------------------------------------------------------------------------------------------|
   | CEMS-Wildfire Dataset (links-ads) | https://huggingface.co/datasets/links-ads/wildfires-cems                                                             |                          
@@ -1123,5 +1161,14 @@ Image Segmentation. . *DLMIA @ MICCAI 2018. Springer LNCS 11045,*, 3-11.
   | Copernicus EMS Catalonia Fire (2022) | https://data.jrc.ec.europa.eu/dataset/7d5a5041-efac-4762-b9d1-c0b290ab2ce7                                       |                           
   | WUI Map Catalonia                 | https://pdxscholar.library.pdx.edu/esm_fac/215/                                                                     |                           
   | Fire Sondes Data (Catalonia)      | https://zenodo.org/records/6424854                                                                                   | 
+
+### Literature Mentioned
+(1) Karaş, İ. R., Sevinç, H. K., Ibrahim, H., Mohamed, M., Şahin, S., and Oumate, M. O.: Deep Learning-Driven Wildfire Detection in Türkiye Using Sentinel-2 Imagery and Convolutional Neural Networks, Int. Arch. Photogramm. Remote Sens. Spatial Inf. Sci., XLVIII-4/W18-2025, 179–185, https://doi.org/10.5194/isprs-archives-XLVIII-4-W18-2025-179-2026, 2026.
+
+(2) Akhyar, A., Lee, J., Shahar, N., Saputro, A. H., & Zulkifley, M. A. (2025). Automated forest fire detection in ecological monitoring using enhanced deep learning networks. Scientific Reports, 16(1). https://doi.org/10.1038/s41598-025-31707-6
+
+(3) Zheng, Y., Guo, P., Tian, X., & Ye, Y. (2025). A forest fire identification and monitoring model based on improved YOLOv8. Scientific Reports, 15(1), 37018. https://doi.org/10.1038/s41598-025-17893-3
+
+(4) Sykas, D., Zografakis, D., & Demestichas, K. (2024). Deep learning approaches for wildfire severity prediction: A comparative study of image segmentation networks and visual transformers on the EO4WildFires dataset. Fire, 7(11), 374. https://doi.org/10.3390/fire7110374
 
 *Project repository: <https://github.com/essenciary/aidlfire>*
